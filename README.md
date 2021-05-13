@@ -1,2 +1,2 @@
 # psy_peds_study
-Mental health trends in children on EHR data
+Children mental health trends analysis, using EHR data
