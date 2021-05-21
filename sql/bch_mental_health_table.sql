@@ -5,7 +5,7 @@ AS SELECT obs.patient_num, obs.concept_cd, obs.start_date, pat.birth_date, floor
 FROM observation_fact obs
 INNER JOIN patient_dimension pat ON obs.patient_num=pat.patient_num
 INNER JOIN visit_dimension vis ON obs.encounter_num= vis.encounter_num
-INNER JOIN ASE_PEDS_ICD_CODES peds_codes ON obs.concept_cd=peds_codes.ICD10_CODE
+INNER JOIN PEDS_ICD_CODES peds_codes ON obs.concept_cd=peds_codes.ICD10_CODE
 WHERE floor(months_between(obs.start_date, pat.birth_date) / 12) > 10 
       AND floor(months_between(obs.start_date, pat.birth_date) / 12) < 18 
       AND lower(vis.inout_cd) = 'inpatient' 
@@ -18,7 +18,7 @@ AS SELECT obs.patient_num, obs.concept_cd, obs.start_date, pat.birth_date, floor
 FROM observation_fact obs
 INNER JOIN patient_dimension pat ON obs.patient_num=pat.patient_num
 INNER JOIN visit_dimension vis ON obs.encounter_num= vis.encounter_num
-INNER JOIN ASE_PEDS_ICD_CODES peds_codes ON obs.concept_cd=peds_codes.ICD10_CODE
+INNER JOIN PEDS_ICD_CODES peds_codes ON obs.concept_cd=peds_codes.ICD10_CODE
 WHERE floor(months_between(obs.start_date, pat.birth_date) / 12) > 6
       AND floor(months_between(obs.start_date, pat.birth_date) / 12) < 18 
       AND lower(vis.inout_cd) IN ('inpatient', 'outpatient')
