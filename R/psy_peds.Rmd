@@ -62,7 +62,7 @@ We are selecting only those patients that got at least one of the mental health 
 # Read the functions and data needed for the analysis. 
 ```{r suppData, message=FALSE}
 source("../R/readInputFiles.R")
-icdCodes <- read.csv("../public-data/pediatric psychiatric ICD-10 codes_adjusted.csv", header = TRUE, colClasses = "character")
+icdCodes <- read.csv("../public-data/psychiatric_ICD-10_codes_adjusted.csv", header = TRUE, colClasses = "character")
 
 #get only the code 
 icdCodes$concept_code <- sapply(strsplit( icdCodes$ICD10_Code, "[:]"), '[', 2)
