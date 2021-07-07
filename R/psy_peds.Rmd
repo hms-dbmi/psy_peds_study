@@ -1,0 +1,307 @@
+---
+title: "psy_peds"
+output:
+  html_document:
+    code_folding: show
+    toc: yes
+    toc_float: yes
+---
+
+```{r libraries, message=FALSE, warning=FALSE, results='hide'}
+# Install packages
+paket <- function(pak){
+  new_pak <- pak[!(pak %in% rownames(installed.packages()))]
+  if (length(new_pak)) 
+    install.packages(new_pak, dependencies = TRUE,repos="https://cloud.r-project.org/")
+  sapply(pak, library, character.only = TRUE)
+}
+
+listOfPackages <- c("dplyr", "tidyr", "tidyverse", "ggplot2", "RColorBrewer")
+paket(listOfPackages)
+```
+
+
+```{r}
+options(repr.plot.width = 18, repr.plot.height = 9)
+theme_plots <- theme_bw() +
+  theme(axis.text.y = element_text(size=18), 
+        axis.text.x = element_text(size=18,angle = 45, vjust = 1, hjust=1),
+        axis.title = element_text(size=20), 
+        strip.text = element_text(size=20),
+        strip.text.y = element_text(angle = 0),
+        legend.text = element_text(size=16), 
+        legend.title = element_text(size=16), 
+        title = element_text(size=20), 
+        plot.subtitle = element_text(face = "italic")) 
+theme_set(theme_plots)
+```
+
+
+# BCH pediatrics trends: query and plot
+The inclusion criteria for this study is:
+- inpatients
+- Sars-Cov-2 PCR positive or negative (no filter by covid-19 condition, just PCR test done at BCH)
+- filtered by age (11-17)
+- 21st April 2020 - Up to date
+- The ICD-10 code from the list as diagnosis during hospitalization
+
+As input we will generate a table that contains: 
+- patient identifier
+- concept code (ICD-10 code)
+- start date (day-month-year, 30-SEP-20)
+- age (in years)
+- hospitalization status
+
+We will generate this table using as input:
+- localpatientsummary
+- localpatientobservation
+- localpatientclinicalcourse
+
+We are selecting only those patients that got at least one of the mental health ICD codes
+
+# Read the functions and data needed for the analysis. 
+```{r suppData, message=FALSE}
+source("../R/readInputFiles.R")
+icdCodes <- read.csv("../public-data/pediatric psychiatric ICD-10 codes_adjusted.csv", header = TRUE, colClasses = "character")
+
+#get only the code 
+icdCodes$concept_code <- sapply(strsplit( icdCodes$ICD10_Code, "[:]"), '[', 2)
+
+##### get only the 3 digit code (this will not be need it for 2.2 data) //
+icdCodes$concept_code <- sapply(strsplit( icdCodes$concept_code, "[.]"), '[', 1)
+
+# remove potential duplicates and select the columns of interest
+icdCodes <- icdCodes %>% 
+  dplyr::group_by( concept_code ) %>%
+  dplyr::summarise( disorder_group = Mental_Health_Disorder_Group[1], 
+                       description = Description[1]) %>%
+  dplyr::select( disorder_group, concept_code, description )
+  
+```
+
+
+## Read the patient level data input files.
+
+```{r message=FALSE, warning=FALSE}
+### Read the CSV input files
+#change to the path where your phase 2.2 data files are located
+myinputFiles <- "/4ceData/Input/"
+files <- readInputFiles( path      = myinputFiles, 
+                         separator = ",",
+                         skip      = 0, 
+                         verbose   = FALSE )
+  
+### Extract the patient summary and observation information. 
+demo_raw <- files[[1]]
+obs_raw <- files[[2]]
+clinical_raw <- files[[3]]
+```
+
+## Adding columns with hospitalization length to the clinical raw file
+```{r}
+count_sequences_hospitalisation <- function(df, ...) {
+  count_sequences <- rle(df$in_hospital)
+  count_sequences_1 <- lapply(count_sequences, function(x) x[count_sequences$values == 1])
+  n_sequences <- seq_along(count_sequences_1$lengths)
+  sequences <- rep.int(n_sequences, count_sequences_1$lengths)
+  sequences_len <- rep.int(count_sequences_1$lengths, count_sequences_1$lengths)
+  df[df$in_hospital == 1, "n_hospitalisation"] <- sequences
+  df[df$in_hospital == 1, "len_hospitalisation"] <- sequences_len
+  return(df)
+}
+clinical_raw <- clinical_raw %>% group_by(patient_num) %>% 
+  group_modify(count_sequences_hospitalisation)
+```
+
+## Data management 
+
+### Creating a table with all the data we need after filtering by inclusion criteria
+```{r message=FALSE, warning=FALSE}
+### Select only patients with mental diagnosis during hospitalization 
+input_data <- merge( obs_raw, clinical_raw, by=c("patient_num", "days_since_admission"))
+input_data <- input_data %>% 
+  dplyr::filter( concept_type == "DIAG-ICD10", 
+                 in_hospital == 1, 
+                 concept_code %in% icdCodes$concept_code) %>%
+  dplyr::select( patient_num, concept_type, concept_code, calendar_date, in_hospital, n_hospitalisation, len_hospitalisation)
+
+### Add the demographic data and select only pediatric subset (0-17)
+#####  add a number with the age instead of age group (to make it more similar to 2.2)
+demo_raw$age <- as.numeric(substr(demo_raw$age_group, 1, 2))
+
+demo_selection     <- demo_raw %>%
+  dplyr::filter( age < 18 & age > 5 ) %>%
+  dplyr::select( patient_num, sex, age )
+
+input_data <- merge( input_data, demo_selection, by = "patient_num")
+
+### Determine the obfuscation threshold (FALSE if no obfuscation, the numeric value of the obfuscation threshold if any)
+obfuscation =  FALSE
+#obfuscation = 3
+
+### Determine the analysis period
+period = "week"
+```
+
+### Determine start date and cut-off date for early vs late pandemic
+```{r}
+# filter by date, to meet the inclusion criteria (here as example, the 1st May 2020)
+start_date   <- "2020-05-01"
+cut_off_date <- "2021-01-01"
+
+# check the format of the dates is the the expected one
+
+# breaks by week
+input_data$date <- as.Date( input_data$calendar_date )
+input_data$weeks <- cut(input_data[,"date"], breaks="week")
+input_data$year <-sapply(strsplit( as.character(input_data$weeks), "-"), '[', 1) 
+
+input_data <- input_data %>% 
+  dplyr::mutate( period = ifelse( date < cut_off_date, "early_pandemic","late_pandemic")) %>%
+  dplyr::filter( date >= start_date)
+
+# add the concept description and group
+input_data <- merge( input_data, icdCodes, by = "concept_code")
+```
+
+# Temporal trend
+
+## Patients count per week
+
+```{r}
+#select the patient identifier and the week and remove potential duplicates 
+subset <- unique(input_data[ , c("patient_num", "weeks")])
+print(paste("Number of unique patients seen per week: ", length(unique(subset$patient_num))))
+summary(subset$week)
+
+#estimate the number of patients per week
+input_data[, c("patient_num", "weeks")] %>%
+  unique() %>%
+  group_by(weeks) %>%
+  tally() %>%
+  ggplot(aes(x = as.Date(weeks), y = n, fill = "Patients count")) +
+  geom_bar(stat="identity")+
+  labs(y = "Counts",
+       x = "Week",
+       title = "Weekly patient counts with mental health related ICD codes",
+       subtitle = "BCH - Inpatient diagnoses, X-Y age group") + 
+  theme(legend.position = "none") + 
+  scale_fill_brewer(palette = "Dark2") +
+  geom_smooth(method = "lm", formula = y ~ splines::ns(x, 2), se = TRUE, aes(colour=period), colour= "black", size = 0.5)
+
+ggsave("../output/overall_weekly_count.png", width = 18, height = 9, units="in")
+```
+
+## Grouping by ICD subgroup category 
+
+```{r}
+input_data[input_data$in_hospital == 1,c("patient_num", "weeks", "disorder_group")] %>%
+  unique() %>%
+  group_by(weeks, disorder_group) %>% tally() %>%
+  ggplot(aes(x = as.Date(weeks), y= n, fill = "", group = disorder_group )) +
+  geom_bar(stat = "identity")+
+  labs(x = "Week",
+       y = "Counts",
+       title = "Patient counts with mental health related ICD codes: grouped per ICD subcategories", 
+       subtitle = "BCH - X-Y age group, inpatients only") + 
+  scale_fill_manual(values=c('#00BFC4'))+
+  geom_smooth(method = "lm", formula = y ~ splines::ns(x, 2), se= TRUE, aes(colour=period), colour= "black", size = 0.5) + 
+  ylim(0, NA) + 
+  facet_wrap(. ~ disorder_group, scales = "free_y") +
+  theme(strip.text.x = element_text(size = 8),
+        axis.text.x = element_text(size = 12), 
+        legend.position = "none")
+ggsave("../output/categorical_counts_inpatient_teens.png", width = 18, height = 9, units="in")
+
+```
+
+# Summary table 1
+
+## Age
+```{r}
+input_data %>%
+  dplyr::group_by( period ) %>% 
+  dplyr::summarise( mean_age = mean( age ), 
+                    sd_age = sd( age ))
+```
+
+## Sex
+```{r}
+sex <- input_data %>% 
+  dplyr::group_by( sex ) %>%
+  dplyr::count( num = patient_num ) %>% 
+  dplyr::tally( )
+
+sex$percentage <- round( sex$n / sum(sex$n) * 100, 2)   
+sex
+
+sex_by_period <- input_data %>% 
+  group_by(period, sex ) %>% 
+  summarise(num = n_distinct(patient_num)) %>%
+  group_by(period, add=TRUE) %>%
+  mutate( total = sum( num )) %>%
+  mutate(Percentage=round(num/total*100, 2)) %>%
+  pivot_wider(id_cols = sex, names_from = period, values_from = c(num, total, Percentage))
+
+sex_by_period
+```
+
+## Diagnosis
+
+### By ICD code
+```{r}
+summary_diagnosis <- input_data %>%
+  dplyr::group_by( concept_code, description ) %>%
+  dplyr::count( patient_num ) %>% 
+  dplyr::tally() %>%
+  dplyr::arrange( desc(n))
+
+summary_diagnosis[ 1:10, ]
+```
+
+### By disorder group
+```{r}
+summary_disorder_group <- input_data %>%
+  dplyr::group_by( disorder_group ) %>%
+  dplyr::count( patient_num ) %>% 
+  dplyr::tally() %>%
+  dplyr::arrange( desc(n))
+
+summary_disorder_group
+
+summary_disorder_group_by_period <- input_data %>% 
+  dplyr::group_by( period, disorder_group ) %>%
+  summarise(num = n_distinct(patient_num)) %>%
+  group_by(period, add=TRUE) %>%
+  mutate( total = sum( num )) %>%
+  mutate(Percentage=round(num/total*100, 2)) %>%
+  pivot_wider(id_cols = disorder_group, names_from = period, values_from = c(num, total, Percentage))
+
+summary_disorder_group_by_period
+```
+
+
+## Hospitalization
+
+### Lenght of hospitalization 
+```{r}
+input_data %>%
+  dplyr::group_by( period ) %>% 
+  dplyr::summarise( length_hospt_median = median(len_hospitalisation), 
+                    IQR = IQR( len_hospitalisation ))
+```
+
+### Repeat hospitalizations by patient
+```{r}
+input_data %>% 
+  dplyr::group_by( period, patient_num ) %>%
+  dplyr::summarise(num = n_distinct(n_hospitalisation)) %>%
+  dplyr::summarise( mean_repeated_hospitalizations = mean(num), 
+                    max_repeated_hospitalizations = max(num),
+                    median_repeated_hospitalizations = median(num), 
+                    IQR = IQR( num ))
+ 
+
+```
+
+
