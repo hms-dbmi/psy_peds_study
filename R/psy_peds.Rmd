@@ -127,9 +127,10 @@ input_data <- input_data %>%
 
 ### Add the demographic data and select only pediatric subset (0-17)
 #####  add a number with the age instead of age group (to make it more similar to 2.2)
+##### 2.1 adaptation
 demo_raw$age <- as.numeric(substr(demo_raw$age_group, 1, 2))
 
-demo_selection     <- demo_raw %>%
+demo_selection  <- demo_raw %>%
   dplyr::filter( age < 18 & age > 5 ) %>%
   dplyr::select( patient_num, sex, age )
 
@@ -170,7 +171,7 @@ input_data <- merge( input_data, icdCodes, by = "concept_code")
 
 ```{r}
 #select the patient identifier and the week and remove potential duplicates 
-subset <- unique(input_data[ , c("patient_num", "weeks")])
+subset <- unique(input_data[ , c("patient_num", "weeks")]) 
 print(paste("Number of unique patients seen per week: ", length(unique(subset$patient_num))))
 summary(subset$week)
 
@@ -217,20 +218,54 @@ ggsave("../output/categorical_counts_inpatient_teens.png", width = 18, height = 
 
 # Summary table 1
 
+```{r}
+t.test2 <- function(m1, m2, s1, s2, n1, n2) {
+  # t.test from sample statistics, ie using mean, standard deviation and count value of the samples
+  # useful in case we can only retrieve aggregated stats from the sites
+  # ref: https://stats.stackexchange.com/questions/30394/how-to-perform-two-sample-t-tests-in-r-by-inputting-sample-statistics-rather-tha 
+  # and https://en.wikipedia.org/wiki/Student%27s_t-test?oldformat=true#Equal_or_unequal_sample_sizes,_unequal_variances_(sX1_%3E_2sX2_or_sX2_%3E_2sX1)
+  se <- sqrt( (s1^2/n1) + (s2^2/n2) )
+  # welch-satterthwaite df
+  df <- ( (s1^2/n1 + s2^2/n2)^2 )/( (s1^2/n1)^2/(n1-1) + (s2^2/n2)^2/(n2-1) )
+  t <- (m1-m2)/se 
+  dat <- c(m1-m2, se, t, 2*pt(-abs(t),df))    
+  names(dat) <- c("Difference of means", "Std Error", "t", "p-value")
+  return(dat)
+}
+```
+
+## Count
+```{r}
+count <- table(input_data$period)
+count
+```
+
+
 ## Age
 ```{r}
-input_data %>%
+age_stats <- input_data %>%
+  dplyr::distinct(patient_num, period, age) %>% 
   dplyr::group_by( period ) %>% 
-  dplyr::summarise( mean_age = mean( age ), 
-                    sd_age = sd( age ))
+  dplyr::summarise( mean = mean( age ), 
+                    sd = sd( age ), 
+                    count = n()) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::bind_rows(
+    dplyr::summarise(input_data, period="Total", mean=mean(age), sd=sd(age), count = n())
+  )
+age_test <- t.test2(m1 = age_stats[[1, "mean"]], 
+                    m2 = age_stats[[2, "mean"]], 
+                    s1 = age_stats[[1, "sd"]], 
+                    s2 = age_stats[[2, "sd"]], 
+                    n1 = age_stats[[1, "count"]], 
+                    n2 = age_stats[[2, "count"]])
 ```
 
 ## Sex
 ```{r}
 sex <- input_data %>% 
   dplyr::group_by( sex ) %>%
-  dplyr::count( num = patient_num ) %>% 
-  dplyr::tally( )
+  dplyr::summarise( n = n_distinct(patient_num) )
 
 sex$percentage <- round( sex$n / sum(sex$n) * 100, 2)   
 sex
@@ -238,12 +273,13 @@ sex
 sex_by_period <- input_data %>% 
   group_by(period, sex ) %>% 
   summarise(num = n_distinct(patient_num)) %>%
-  group_by(period, add=TRUE) %>%
-  mutate( total = sum( num )) %>%
-  mutate(Percentage=round(num/total*100, 2)) %>%
-  pivot_wider(id_cols = sex, names_from = period, values_from = c(num, total, Percentage))
+  group_by(period, add=TRUE) %>% 
+  mutate( num_total = sum( num )) %>%
+  mutate(percentage=round(num/num_total*100, 2)) %>%
+  pivot_wider(names_from = sex, values_from = c(num, percentage))
 
-sex_by_period
+sex_test <- chisq.test(sex_by_period[c("num_female", "num_male")])$p.value
+
 ```
 
 ## Diagnosis
@@ -251,12 +287,19 @@ sex_by_period
 ### By ICD code
 ```{r}
 summary_diagnosis <- input_data %>%
-  dplyr::group_by( concept_code, description ) %>%
+  dplyr::distinct( patient_num, description, period, weeks, concept_code ) %>% 
+  dplyr::group_by( concept_code, description, period ) %>%
   dplyr::count( patient_num ) %>% 
   dplyr::tally() %>%
-  dplyr::arrange( desc(n))
+  dplyr::arrange( desc(n) )
 
-summary_diagnosis[ 1:10, ]
+summary_diagnosis_test <- summary_diagnosis %>%
+  tidyr::pivot_wider(names_from = period,
+                     values_from = n) %>%
+  ungroup() %>% 
+  select(late_pandemic, early_pandemic) %>% 
+  tidyr::replace_na(list(late_pandemic = 0, early_pandemic = 0)) %>% 
+  chisq.test()
 ```
 
 ### By disorder group
@@ -267,17 +310,23 @@ summary_disorder_group <- input_data %>%
   dplyr::tally() %>%
   dplyr::arrange( desc(n))
 
-summary_disorder_group
-
 summary_disorder_group_by_period <- input_data %>% 
+  dplyr::distinct( patient_num, disorder_group, period, weeks ) %>% 
   dplyr::group_by( period, disorder_group ) %>%
   summarise(num = n_distinct(patient_num)) %>%
   group_by(period, add=TRUE) %>%
-  mutate( total = sum( num )) %>%
-  mutate(Percentage=round(num/total*100, 2)) %>%
-  pivot_wider(id_cols = disorder_group, names_from = period, values_from = c(num, total, Percentage))
+  mutate(percentage=round(num/sum( num )*100, 2)) %>%
+  pivot_wider(id_cols = disorder_group, names_from = period, values_from = c(num, percentage)) %>% 
+  mutate(across(where(is.numeric), ~replace_na(.x, replace = 0)))
 
-summary_disorder_group_by_period
+summary_disorder_group_by_period_test <- summary_disorder_group_by_period %>% 
+  select(num_early_pandemic, num_late_pandemic) %>% 
+  chisq.test()
+
+summary_disorder_group_by_period %>% 
+  bind_rows(
+    dplyr::summarise(., disorder_group="Total", across(where(is.numeric), sum))
+  )
 ```
 
 
@@ -285,23 +334,52 @@ summary_disorder_group_by_period
 
 ### Lenght of hospitalization 
 ```{r}
-input_data %>%
+## Calculating also mean and sd in case we can only retrieve aggregated data from the sites
+hospit_length <- input_data %>%
+  dplyr::distinct( patient_num, n_hospitalisation, len_hospitalisation, period ) %>%
   dplyr::group_by( period ) %>% 
-  dplyr::summarise( length_hospt_median = median(len_hospitalisation), 
-                    IQR = IQR( len_hospitalisation ))
+  dplyr::summarise( n_hospitalisations = n(),
+                    length_hospt_median = median(len_hospitalisation), 
+                    IQR = IQR( len_hospitalisation), 
+                    length_hospt_mean = round(mean(len_hospitalisation), 2),
+                    length_hospt_sd = round(sd(len_hospitalisation), 2))
+
+hospit_length_mean_test <- t.test2(
+  m1 = hospit_length[[1, "length_hospt_mean"]],
+  m2 = hospit_length[[2, "length_hospt_mean"]],
+  s1 = hospit_length[[1, "length_hospt_sd"]],
+  s2 = hospit_length[[2, "length_hospt_sd"]],
+  n1 = hospit_length[[1, "n_hospitalisations"]],
+  n2 = hospit_length[[2, "n_hospitalisations"]]
+)
+
 ```
 
 ### Repeat hospitalizations by patient
 ```{r}
-input_data %>% 
-  dplyr::group_by( period, patient_num ) %>%
-  dplyr::summarise(num = n_distinct(n_hospitalisation)) %>%
-  dplyr::summarise( mean_repeated_hospitalizations = mean(num), 
-                    max_repeated_hospitalizations = max(num),
-                    median_repeated_hospitalizations = median(num), 
-                    IQR = IQR( num ))
- 
 
+ 
+hospitalisation_count <- input_data %>% 
+  dplyr::distinct( patient_num, period, n_hospitalisation ) %>% 
+  dplyr::group_by( period, patient_num ) %>%
+  dplyr::filter(n_hospitalisation == max(n_hospitalisation)) %>%
+  dplyr::group_by( period, add = FALSE) %>% 
+  dplyr::summarise( mean_count_hospitalizations = mean(n_hospitalisation), 
+                    max_count_hospitalizations = max(n_hospitalisation),
+                    median_count_hospitalizations = median(n_hospitalisation), 
+                    sd_hospitalisation_count = sd(n_hospitalisation),
+                    IQR_hospitalisation_count = IQR( n_hospitalisation ))
+
+repeated_hospitalisation <- input_data %>% 
+  dplyr::distinct( patient_num, period, n_hospitalisation ) %>% 
+  dplyr::group_by(patient_num, period) %>% 
+  dplyr::filter(n_hospitalisation == max(n_hospitalisation)) %>% 
+  dplyr::mutate(repeated_hospitalisation = if_else(n_hospitalisation > 1, "repeated", "non_repeated")) %>% 
+  dplyr::group_by( period, add = FALSE ) %>% 
+  dplyr::count( repeated_hospitalisation ) %>% 
+  tidyr::pivot_wider(names_from = repeated_hospitalisation, values_from = n)
+repeated_hospitalisation
+repeated_hospitalisation_test <- chisq.test(repeated_hospitalisation[, c("non_repeated", "repeated")])
 ```
 
 
