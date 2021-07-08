@@ -191,6 +191,47 @@ input_data[, c("patient_num", "weeks")] %>%
 ggsave("../output/overall_weekly_count.png", width = 18, height = 9, units="in")
 ```
 
+## Grouping by sex
+```{r}
+input_data[, c("patient_num", "sex","weeks")] %>%
+  unique() %>%
+  group_by(weeks, sex) %>%
+  tally() %>%
+  mutate(n = ifelse( n > obfuscation, n, obfuscation * 0.5)) %>%
+  ggplot(aes(x = as.Date(weeks), y = n, fill = sex)) +
+  geom_bar(stat="identity", position = "dodge")+
+  labs(y = "Counts",
+       x = "Week",
+       title = "Weekly patient counts with mental health related ICD codes aggregated by sex",
+       subtitle = "BCH - Inpatient diagnoses, X-Y age group") + 
+  theme(legend.position = "bottom") + 
+  scale_fill_grey() +
+  geom_smooth(method = "lm", formula = y ~ splines::ns(x, 2), se = TRUE, aes(colour=sex), colour= "black", size = 0.5)
+```
+
+## Grouping by age group
+```{r}
+#estimate the number of patients per week by age group
+input_data[, c("patient_num", "age","weeks")] %>%
+  unique() %>%
+  mutate( age_group = ifelse( age < 10, "children", "adolescent")) %>%
+  group_by(weeks, age_group) %>%
+  tally() %>%
+  mutate(n = ifelse( n > obfuscation, n, obfuscation * 0.5))  %>%
+    ggplot(aes(x = as.Date(weeks), y = n, fill = age_group)) +
+    geom_bar(stat="identity", position = "dodge")+
+    labs(y = "Counts",
+         x = "Week",
+         title = "Weekly patient counts with mental health related ICD codes aggregated by age group",
+         subtitle = "BCH - Inpatient diagnoses, X-Y age group") + 
+    theme(legend.position = "bottom") + 
+    scale_fill_grey() +
+    geom_smooth(method = "lm", formula = y ~ splines::ns(x, 2), se = TRUE, aes(colour=sex), colour= "black", size = 0.5)
+
+```
+
+
+
 ## Grouping by ICD subgroup category 
 
 ```{r}
