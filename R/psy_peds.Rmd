@@ -16,7 +16,7 @@ paket <- function(pak){
   sapply(pak, library, character.only = TRUE)
 }
 
-listOfPackages <- c("dplyr", "tidyr", "tidyverse", "ggplot2", "RColorBrewer")
+listOfPackages <- c("tidyverse", "RColorBrewer", "kableExtra")
 paket(listOfPackages)
 ```
 
@@ -220,7 +220,7 @@ ggsave("../output/categorical_counts_inpatient_teens.png", width = 18, height = 
 
 ```{r}
 t.test2 <- function(m1, m2, s1, s2, n1, n2) {
-  # t.test from sample statistics, ie using mean, standard deviation and count value of the samples
+  # t.test computed from sample statistics, ie using mean, standard deviation and count value of the samples
   # useful in case we can only retrieve aggregated stats from the sites
   # ref: https://stats.stackexchange.com/questions/30394/how-to-perform-two-sample-t-tests-in-r-by-inputting-sample-statistics-rather-tha 
   # and https://en.wikipedia.org/wiki/Student%27s_t-test?oldformat=true#Equal_or_unequal_sample_sizes,_unequal_variances_(sX1_%3E_2sX2_or_sX2_%3E_2sX1)
@@ -234,7 +234,7 @@ t.test2 <- function(m1, m2, s1, s2, n1, n2) {
 }
 ```
 
-## Count
+## Count subjects
 ```{r}
 count <- table(input_data$period)
 count
@@ -258,27 +258,33 @@ age_test <- t.test2(m1 = age_stats[[1, "mean"]],
                     s1 = age_stats[[1, "sd"]], 
                     s2 = age_stats[[2, "sd"]], 
                     n1 = age_stats[[1, "count"]], 
-                    n2 = age_stats[[2, "count"]])
+                    n2 = age_stats[[2, "count"]]) %>% 
+  `[[`("p-value")
 ```
 
 ## Sex
 ```{r}
 sex <- input_data %>% 
   dplyr::group_by( sex ) %>%
-  dplyr::summarise( n = n_distinct(patient_num) )
+  dplyr::summarise( count = n_distinct(patient_num) )
 
-sex$percentage <- round( sex$n / sum(sex$n) * 100, 2)   
+sex$percentage <- round( sex$count / sum(sex$count) * 100, 2)   
 sex
 
 sex_by_period <- input_data %>% 
   group_by(period, sex ) %>% 
-  summarise(num = n_distinct(patient_num)) %>%
+  summarise(count = n_distinct(patient_num)) %>%
   group_by(period, add=TRUE) %>% 
-  mutate( num_total = sum( num )) %>%
-  mutate(percentage=round(num/num_total*100, 2)) %>%
-  pivot_wider(names_from = sex, values_from = c(num, percentage))
+  mutate(percentage=round(count/sum( count )*100, 2))
+  
 
-sex_test <- chisq.test(sex_by_period[c("num_female", "num_male")])$p.value
+sex_test <- sex_by_period %>% 
+  pivot_wider(names_from = sex, values_from = c(count, percentage)) %>% 
+  ungroup() %>% 
+  select(count_female, count_male) %>% 
+  chisq.test() %>% 
+  `[[`("p.value")
+
 
 ```
 
@@ -290,16 +296,18 @@ summary_diagnosis <- input_data %>%
   dplyr::distinct( patient_num, description, period, weeks, concept_code ) %>% 
   dplyr::group_by( concept_code, description, period ) %>%
   dplyr::count( patient_num ) %>% 
-  dplyr::tally() %>%
-  dplyr::arrange( desc(n) )
+  dplyr::tally(name = "count") %>%
+  dplyr::arrange( desc(count) ) %>% 
+  dplyr::ungroup()
 
-summary_diagnosis_test <- summary_diagnosis %>%
+summary_diagnosis_test <- summary_diagnosis %>% 
   tidyr::pivot_wider(names_from = period,
-                     values_from = n) %>%
-  ungroup() %>% 
+                     values_from = count) %>%
   select(late_pandemic, early_pandemic) %>% 
   tidyr::replace_na(list(late_pandemic = 0, early_pandemic = 0)) %>% 
-  chisq.test()
+  chisq.test() %>% 
+  `[[`("p.value")
+
 ```
 
 ### By disorder group
@@ -307,32 +315,29 @@ summary_diagnosis_test <- summary_diagnosis %>%
 summary_disorder_group <- input_data %>%
   dplyr::group_by( disorder_group ) %>%
   dplyr::count( patient_num ) %>% 
-  dplyr::tally() %>%
-  dplyr::arrange( desc(n))
+  dplyr::tally(name = "count") %>%
+  dplyr::arrange( desc( count ))
 
 summary_disorder_group_by_period <- input_data %>% 
   dplyr::distinct( patient_num, disorder_group, period, weeks ) %>% 
   dplyr::group_by( period, disorder_group ) %>%
-  summarise(num = n_distinct(patient_num)) %>%
+  summarise(count = n_distinct(patient_num)) %>%
   group_by(period, add=TRUE) %>%
-  mutate(percentage=round(num/sum( num )*100, 2)) %>%
-  pivot_wider(id_cols = disorder_group, names_from = period, values_from = c(num, percentage)) %>% 
-  mutate(across(where(is.numeric), ~replace_na(.x, replace = 0)))
+  mutate(percentage=round(count/sum( count )*100, 2)) 
 
 summary_disorder_group_by_period_test <- summary_disorder_group_by_period %>% 
-  select(num_early_pandemic, num_late_pandemic) %>% 
-  chisq.test()
+  pivot_wider(id_cols = disorder_group, names_from = period, values_from = c(count, percentage)) %>% 
+  mutate(across(where(is.numeric), ~replace_na(.x, replace = 0))) %>% 
+  select(count_early_pandemic, count_late_pandemic) %>% 
+  chisq.test() %>% 
+  `[[`("p.value")
 
-summary_disorder_group_by_period %>% 
-  bind_rows(
-    dplyr::summarise(., disorder_group="Total", across(where(is.numeric), sum))
-  )
 ```
 
 
 ## Hospitalization
 
-### Lenght of hospitalization 
+### Length of hospitalization 
 ```{r}
 ## Calculating also mean and sd in case we can only retrieve aggregated data from the sites
 hospit_length <- input_data %>%
@@ -379,7 +384,93 @@ repeated_hospitalisation <- input_data %>%
   dplyr::count( repeated_hospitalisation ) %>% 
   tidyr::pivot_wider(names_from = repeated_hospitalisation, values_from = n)
 repeated_hospitalisation
-repeated_hospitalisation_test <- chisq.test(repeated_hospitalisation[, c("non_repeated", "repeated")])
+repeated_hospitalisation_test <- chisq.test(repeated_hospitalisation[, c("non_repeated", "repeated")]) %>% 
+  `[[`("p.value")
 ```
 
+
+## Pulling together Table 1 statistics
+```{r}
+
+# count
+# sex
+# # race
+# diagnoses
+# hospitalisations
+
+format_counts <- function(count, percentage) {
+  glue::glue("{count} ({percentage} %)", count = count, percentage = percentage)
+}
+
+sex_table1 <- sex_by_period %>% 
+  bind_rows(
+    sex_by_period %>%
+      group_by(period) %>% 
+      dplyr::summarise(sex = "Total", count = sum(count), percentage = sum(percentage))
+  ) %>% 
+  mutate(result = format_counts(count, percentage)) %>% 
+  select(-c(count, percentage)) %>% 
+  pivot_wider( names_from = period, values_from = result ) %>% 
+  rename(name = sex)
+
+
+
+diagnosis_table1 <- summary_diagnosis %>% 
+    bind_rows(
+    sex_by_period %>%
+      group_by(period) %>% 
+      dplyr::summarise(concept_code = "Total", count = sum(count))
+  ) %>%
+  pivot_wider( names_from = period, values_from = count) %>% 
+  mutate(diag = paste(concept_code, description, sep = ": ")) %>% 
+  select(diag, early_pandemic, late_pandemic) %>% 
+  rename(name = diag)
+  
+disorder_table1 <- summary_disorder_group_by_period %>% 
+  bind_rows(
+    dplyr::summarise(., disorder_group="Total", across(where(is.numeric), sum))
+  ) %>% 
+  mutate(result = format_counts(count, percentage)) %>% 
+  select(-c(count, percentage)) %>% 
+  pivot_wider( names_from = period, values_from = result ) %>% 
+  replace_na( list(early_pandemic = "0 (0 %)", 
+                   late_pandemic = "0 (0 %)")) %>% 
+  rename(name = disorder_group)
+
+
+hospit_table1 <- hospit_length %>% 
+  mutate(median = glue::glue("{median} ({IQR})", median = length_hospt_median, IQR = IQR), 
+         mean = glue::glue("{mean} ({sd})", mean = length_hospt_mean, sd = length_hospt_sd), 
+         n_hospitalisations = as.character(n_hospitalisations)) %>% 
+  select(median, mean, n_hospitalisations, period) %>% 
+  pivot_longer(cols = c("n_hospitalisations", "median", "mean")) %>% 
+  pivot_wider(names_from = period, values_from = value)
+
+repeated_hospit_table1 <- repeated_hospitalisation %>% 
+  pivot_longer(cols = c("non_repeated", "repeated")) %>% 
+  pivot_wider(names_from = period, values_from = value)
+
+tests <- c("Sex" = sex_test, 
+           "Diagnoses" = summary_diagnosis_test, 
+           "Disorder groups" = summary_disorder_group_by_period_test, 
+           "Hospitalisations length" = repeated_hospitalisation_test, 
+           "Repeated hospitalisations" = repeated_hospitalisation_test) %>% 
+  data.frame() %>% 
+  round(2)
+names(tests) <- "pvalue"
+tests["Category"] <- row.names(tests)
+  
+
+table1 <- list(
+  "Sex" = sex_table1, 
+  "Diagnoses" = diagnosis_table1,
+  "Disorder groups" = disorder_table1, 
+  "Hospitalisations length" = hospit_table1,
+  "Repeated hospitalisations" = repeated_hospit_table1) %>% 
+  lapply(function(df) mutate(df, across(.fns = as.character))) %>% 
+  dplyr::bind_rows(.id = "Category") %>% 
+  dplyr::left_join(tests, by = "Category")
+
+table1 %>% kable()
+```
 

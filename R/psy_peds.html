@@ -1629,7 +1629,7 @@ paket &lt;- function(pak){
   sapply(pak, library, character.only = TRUE)
 }
 
-listOfPackages &lt;- c(&quot;dplyr&quot;, &quot;tidyr&quot;, &quot;tidyverse&quot;, &quot;ggplot2&quot;, &quot;RColorBrewer&quot;)
+listOfPackages &lt;- c(&quot;tidyverse&quot;, &quot;RColorBrewer&quot;, &quot;kableExtra&quot;)
 paket(listOfPackages)</code></pre>
 <pre class="r"><code>options(repr.plot.width = 18, repr.plot.height = 9)
 theme_plots &lt;- theme_bw() +
@@ -1653,7 +1653,7 @@ theme_set(theme_plots)</code></pre>
 <div id="read-the-functions-and-data-needed-for-the-analysis." class="section level1">
 <h1>Read the functions and data needed for the analysis.</h1>
 <pre class="r"><code>source(&quot;../R/readInputFiles.R&quot;)
-icdCodes &lt;- read.csv(&quot;../public-data/pediatric psychiatric ICD-10 codes_adjusted.csv&quot;, header = TRUE, colClasses = &quot;character&quot;)
+icdCodes &lt;- read.csv(&quot;../public-data/psychiatric_ICD-10_codes_adjusted.csv&quot;, header = TRUE, colClasses = &quot;character&quot;)
 
 #get only the code 
 icdCodes$concept_code &lt;- sapply(strsplit( icdCodes$ICD10_Code, &quot;[:]&quot;), '[', 2)
@@ -1711,9 +1711,10 @@ input_data &lt;- input_data %&gt;%
 
 ### Add the demographic data and select only pediatric subset (0-17)
 #####  add a number with the age instead of age group (to make it more similar to 2.2)
+##### 2.1 adaptation
 demo_raw$age &lt;- as.numeric(substr(demo_raw$age_group, 1, 2))
 
-demo_selection     &lt;- demo_raw %&gt;%
+demo_selection  &lt;- demo_raw %&gt;%
   dplyr::filter( age &lt; 18 &amp; age &gt; 5 ) %&gt;%
   dplyr::select( patient_num, sex, age )
 
@@ -1753,7 +1754,7 @@ input_data &lt;- merge( input_data, icdCodes, by = &quot;concept_code&quot;)</co
 <div id="patients-count-per-week" class="section level2">
 <h2>Patients count per week</h2>
 <pre class="r"><code>#select the patient identifier and the week and remove potential duplicates 
-subset &lt;- unique(input_data[ , c(&quot;patient_num&quot;, &quot;weeks&quot;)])
+subset &lt;- unique(input_data[ , c(&quot;patient_num&quot;, &quot;weeks&quot;)]) 
 print(paste(&quot;Number of unique patients seen per week: &quot;, length(unique(subset$patient_num))))</code></pre>
 <pre><code>## [1] &quot;Number of unique patients seen per week:  51&quot;</code></pre>
 <pre class="r"><code>summary(subset$week)</code></pre>
@@ -1828,165 +1829,1385 @@ input_data[, c(&quot;patient_num&quot;, &quot;weeks&quot;)] %&gt;%
 </div>
 <div id="summary-table-1" class="section level1">
 <h1>Summary table 1</h1>
+<pre class="r"><code>t.test2 &lt;- function(m1, m2, s1, s2, n1, n2) {
+  # t.test computed from sample statistics, ie using mean, standard deviation and count value of the samples
+  # useful in case we can only retrieve aggregated stats from the sites
+  # ref: https://stats.stackexchange.com/questions/30394/how-to-perform-two-sample-t-tests-in-r-by-inputting-sample-statistics-rather-tha 
+  # and https://en.wikipedia.org/wiki/Student%27s_t-test?oldformat=true#Equal_or_unequal_sample_sizes,_unequal_variances_(sX1_%3E_2sX2_or_sX2_%3E_2sX1)
+  se &lt;- sqrt( (s1^2/n1) + (s2^2/n2) )
+  # welch-satterthwaite df
+  df &lt;- ( (s1^2/n1 + s2^2/n2)^2 )/( (s1^2/n1)^2/(n1-1) + (s2^2/n2)^2/(n2-1) )
+  t &lt;- (m1-m2)/se 
+  dat &lt;- c(m1-m2, se, t, 2*pt(-abs(t),df))    
+  names(dat) &lt;- c(&quot;Difference of means&quot;, &quot;Std Error&quot;, &quot;t&quot;, &quot;p-value&quot;)
+  return(dat)
+}</code></pre>
+<div id="count-subjects" class="section level2">
+<h2>Count subjects</h2>
+<pre class="r"><code>count &lt;- table(input_data$period)
+count</code></pre>
+<pre><code>## 
+## early_pandemic  late_pandemic 
+##            127            144</code></pre>
+</div>
 <div id="age" class="section level2">
 <h2>Age</h2>
-<pre class="r"><code>input_data %&gt;%
+<pre class="r"><code>age_stats &lt;- input_data %&gt;%
+  dplyr::distinct(patient_num, period, age) %&gt;% 
   dplyr::group_by( period ) %&gt;% 
-  dplyr::summarise( mean_age = mean( age ), 
-                    sd_age = sd( age ))</code></pre>
-<pre><code>## # A tibble: 2 x 3
-##   period         mean_age sd_age
-## * &lt;chr&gt;             &lt;dbl&gt;  &lt;dbl&gt;
-## 1 early_pandemic     11.3   1.89
-## 2 late_pandemic      11.4   1.84</code></pre>
+  dplyr::summarise( mean = mean( age ), 
+                    sd = sd( age ), 
+                    count = n()) %&gt;% 
+  dplyr::ungroup() %&gt;% 
+  dplyr::bind_rows(
+    dplyr::summarise(input_data, period=&quot;Total&quot;, mean=mean(age), sd=sd(age), count = n())
+  )
+age_test &lt;- t.test2(m1 = age_stats[[1, &quot;mean&quot;]], 
+                    m2 = age_stats[[2, &quot;mean&quot;]], 
+                    s1 = age_stats[[1, &quot;sd&quot;]], 
+                    s2 = age_stats[[2, &quot;sd&quot;]], 
+                    n1 = age_stats[[1, &quot;count&quot;]], 
+                    n2 = age_stats[[2, &quot;count&quot;]]) %&gt;% 
+  `[[`(&quot;p-value&quot;)</code></pre>
 </div>
 <div id="sex" class="section level2">
 <h2>Sex</h2>
 <pre class="r"><code>sex &lt;- input_data %&gt;% 
   dplyr::group_by( sex ) %&gt;%
-  dplyr::count( num = patient_num ) %&gt;% 
-  dplyr::tally( )
+  dplyr::summarise( count = n_distinct(patient_num) )
 
-sex$percentage &lt;- round( sex$n / sum(sex$n) * 100, 2)   
+sex$percentage &lt;- round( sex$count / sum(sex$count) * 100, 2)   
 sex</code></pre>
 <pre><code>## # A tibble: 2 x 3
-##   sex        n percentage
+##   sex    count percentage
 ##   &lt;fct&gt;  &lt;int&gt;      &lt;dbl&gt;
 ## 1 female    29       56.9
 ## 2 male      22       43.1</code></pre>
 <pre class="r"><code>sex_by_period &lt;- input_data %&gt;% 
   group_by(period, sex ) %&gt;% 
-  summarise(num = n_distinct(patient_num)) %&gt;%
-  group_by(period, add=TRUE) %&gt;%
-  mutate( total = sum( num )) %&gt;%
-  mutate(Percentage=round(num/total*100, 2)) %&gt;%
-  pivot_wider(id_cols = sex, names_from = period, values_from = c(num, total, Percentage))</code></pre>
+  summarise(count = n_distinct(patient_num)) %&gt;%
+  group_by(period, add=TRUE) %&gt;% 
+  mutate(percentage=round(count/sum( count )*100, 2))</code></pre>
 <pre><code>## `summarise()` has grouped output by 'period'. You can override using the `.groups` argument.</code></pre>
 <pre><code>## Warning: The `add` argument of `group_by()` is deprecated as of dplyr 1.0.0.
 ## Please use the `.add` argument instead.</code></pre>
-<pre class="r"><code>sex_by_period</code></pre>
-<pre><code>## # A tibble: 2 x 7
-##   sex   num_early_pande… num_late_pandem… total_early_pan… total_late_pand…
-##   &lt;fct&gt;            &lt;int&gt;            &lt;int&gt;            &lt;int&gt;            &lt;int&gt;
-## 1 fema…               12               18               26               32
-## 2 male                14               14               26               32
-## # … with 2 more variables: Percentage_early_pandemic &lt;dbl&gt;,
-## #   Percentage_late_pandemic &lt;dbl&gt;</code></pre>
+<pre class="r"><code>sex_test &lt;- sex_by_period %&gt;% 
+  pivot_wider(names_from = sex, values_from = c(count, percentage)) %&gt;% 
+  ungroup() %&gt;% 
+  select(count_female, count_male) %&gt;% 
+  chisq.test() %&gt;% 
+  `[[`(&quot;p.value&quot;)</code></pre>
 </div>
 <div id="diagnosis" class="section level2">
 <h2>Diagnosis</h2>
 <div id="by-icd-code" class="section level3">
 <h3>By ICD code</h3>
 <pre class="r"><code>summary_diagnosis &lt;- input_data %&gt;%
-  dplyr::group_by( concept_code, description ) %&gt;%
+  dplyr::distinct( patient_num, description, period, weeks, concept_code ) %&gt;% 
+  dplyr::group_by( concept_code, description, period ) %&gt;%
   dplyr::count( patient_num ) %&gt;% 
-  dplyr::tally() %&gt;%
-  dplyr::arrange( desc(n))
+  dplyr::tally(name = &quot;count&quot;) %&gt;%
+  dplyr::arrange( desc(count) ) %&gt;% 
+  dplyr::ungroup()
 
-summary_diagnosis[ 1:10, ]</code></pre>
-<pre><code>## # A tibble: 10 x 3
-## # Groups:   concept_code [10]
-##    concept_code description                                               n
-##    &lt;fct&gt;        &lt;chr&gt;                                                 &lt;int&gt;
-##  1 F41          Panic disorder [episodic paroxysmal anxiety] without…    22
-##  2 F32          Major depressive disorder, single episode, mild          19
-##  3 R45          Nervousness                                              15
-##  4 F33          Major depressive disorder, recurrent, mild               10
-##  5 F43          Acute stress reaction                                    10
-##  6 Z91          Wandering in diseases classified elsewhere               10
-##  7 F91          Conduct disorder confined to family context               9
-##  8 R41          Attention and concentration deficit                       9
-##  9 F12          Cannabis abuse, uncomplicated                             7
-## 10 F88          Other disorders of psychological development              7</code></pre>
+summary_diagnosis_test &lt;- summary_diagnosis %&gt;% 
+  tidyr::pivot_wider(names_from = period,
+                     values_from = count) %&gt;%
+  select(late_pandemic, early_pandemic) %&gt;% 
+  tidyr::replace_na(list(late_pandemic = 0, early_pandemic = 0)) %&gt;% 
+  chisq.test() %&gt;% 
+  `[[`(&quot;p.value&quot;)</code></pre>
+<pre><code>## Warning in chisq.test(.): Chi-squared approximation may be incorrect</code></pre>
 </div>
 <div id="by-disorder-group" class="section level3">
 <h3>By disorder group</h3>
 <pre class="r"><code>summary_disorder_group &lt;- input_data %&gt;%
   dplyr::group_by( disorder_group ) %&gt;%
   dplyr::count( patient_num ) %&gt;% 
-  dplyr::tally() %&gt;%
-  dplyr::arrange( desc(n))
+  dplyr::tally(name = &quot;count&quot;) %&gt;%
+  dplyr::arrange( desc( count ))
 
-summary_disorder_group</code></pre>
-<pre><code>## # A tibble: 15 x 2
-##    disorder_group                                                      n
-##    &lt;chr&gt;                                                           &lt;int&gt;
-##  1 Mental Health Symptom                                              24
-##  2 Anxiety Disorders                                                  22
-##  3 Depressive Disorders                                               20
-##  4 Suicide or Self-Injury                                             19
-##  5 Miscellaneous                                                      14
-##  6 Trauma and Stressor-Related Disorders                              10
-##  7 Disruptive, Impulse Control and Conduct Disorders                   9
-##  8 Substance-Related and Addictive Disorders                           9
-##  9 Accidental or Undetermined Poisoning                                7
-## 10 Developmental Delay or Unspecified  Neurodevelopmental Disorder     7
-## 11 Bipolar and Related Disorders                                       6
-## 12 Feeding and Eating Disorders                                        3
-## 13 Dissociative Disorders                                              1
-## 14 Obsessive-Compulsive and Related Disorders                          1
-## 15 Schizophrenia Spectrum and Other Psychotic Disorders                1</code></pre>
-<pre class="r"><code>summary_disorder_group_by_period &lt;- input_data %&gt;% 
+summary_disorder_group_by_period &lt;- input_data %&gt;% 
+  dplyr::distinct( patient_num, disorder_group, period, weeks ) %&gt;% 
   dplyr::group_by( period, disorder_group ) %&gt;%
-  summarise(num = n_distinct(patient_num)) %&gt;%
+  summarise(count = n_distinct(patient_num)) %&gt;%
   group_by(period, add=TRUE) %&gt;%
-  mutate( total = sum( num )) %&gt;%
-  mutate(Percentage=round(num/total*100, 2)) %&gt;%
-  pivot_wider(id_cols = disorder_group, names_from = period, values_from = c(num, total, Percentage))</code></pre>
+  mutate(percentage=round(count/sum( count )*100, 2)) </code></pre>
 <pre><code>## `summarise()` has grouped output by 'period'. You can override using the `.groups` argument.</code></pre>
-<pre class="r"><code>summary_disorder_group_by_period</code></pre>
-<pre><code>## # A tibble: 15 x 7
-##    disorder_group        num_early_pande… num_late_pandem… total_early_pan…
-##    &lt;chr&gt;                            &lt;int&gt;            &lt;int&gt;            &lt;int&gt;
-##  1 Accidental or Undete…                4                3               74
-##  2 Anxiety Disorders                    8               17               74
-##  3 Bipolar and Related …                3                5               74
-##  4 Depressive Disorders                 9               13               74
-##  5 Developmental Delay …                1                6               74
-##  6 Disruptive, Impulse …                5                6               74
-##  7 Feeding and Eating D…                2                2               74
-##  8 Mental Health Symptom               12               13               74
-##  9 Miscellaneous                        6                9               74
-## 10 Obsessive-Compulsive…                1               NA               74
-## 11 Schizophrenia Spectr…                1                1               74
-## 12 Substance-Related an…                6                4               74
-## 13 Suicide or Self-Inju…               11               10               74
-## 14 Trauma and Stressor-…                5                6               74
-## 15 Dissociative Disorde…               NA                1               NA
-## # … with 3 more variables: total_late_pandemic &lt;int&gt;,
-## #   Percentage_early_pandemic &lt;dbl&gt;, Percentage_late_pandemic &lt;dbl&gt;</code></pre>
+<pre class="r"><code>summary_disorder_group_by_period_test &lt;- summary_disorder_group_by_period %&gt;% 
+  pivot_wider(id_cols = disorder_group, names_from = period, values_from = c(count, percentage)) %&gt;% 
+  mutate(across(where(is.numeric), ~replace_na(.x, replace = 0))) %&gt;% 
+  select(count_early_pandemic, count_late_pandemic) %&gt;% 
+  chisq.test() %&gt;% 
+  `[[`(&quot;p.value&quot;)</code></pre>
+<pre><code>## Warning in chisq.test(.): Chi-squared approximation may be incorrect</code></pre>
 </div>
 </div>
 <div id="hospitalization" class="section level2">
 <h2>Hospitalization</h2>
-<div id="lenght-of-hospitalization" class="section level3">
-<h3>Lenght of hospitalization</h3>
-<pre class="r"><code>input_data %&gt;%
+<div id="length-of-hospitalization" class="section level3">
+<h3>Length of hospitalization</h3>
+<pre class="r"><code>## Calculating also mean and sd in case we can only retrieve aggregated data from the sites
+hospit_length &lt;- input_data %&gt;%
+  dplyr::distinct( patient_num, n_hospitalisation, len_hospitalisation, period ) %&gt;%
   dplyr::group_by( period ) %&gt;% 
-  dplyr::summarise( length_hospt_median = median(len_hospitalisation), 
-                    IQR = IQR( len_hospitalisation ))</code></pre>
-<pre><code>## # A tibble: 2 x 3
-##   period         length_hospt_median   IQR
-## * &lt;chr&gt;                        &lt;dbl&gt; &lt;dbl&gt;
-## 1 early_pandemic                  11    13
-## 2 late_pandemic                   13    28</code></pre>
+  dplyr::summarise( n_hospitalisations = n(),
+                    length_hospt_median = median(len_hospitalisation), 
+                    IQR = IQR( len_hospitalisation), 
+                    length_hospt_mean = round(mean(len_hospitalisation), 2),
+                    length_hospt_sd = round(sd(len_hospitalisation), 2))
+
+hospit_length_mean_test &lt;- t.test2(
+  m1 = hospit_length[[1, &quot;length_hospt_mean&quot;]],
+  m2 = hospit_length[[2, &quot;length_hospt_mean&quot;]],
+  s1 = hospit_length[[1, &quot;length_hospt_sd&quot;]],
+  s2 = hospit_length[[2, &quot;length_hospt_sd&quot;]],
+  n1 = hospit_length[[1, &quot;n_hospitalisations&quot;]],
+  n2 = hospit_length[[2, &quot;n_hospitalisations&quot;]]
+)</code></pre>
 </div>
 <div id="repeat-hospitalizations-by-patient" class="section level3">
 <h3>Repeat hospitalizations by patient</h3>
-<pre class="r"><code>input_data %&gt;% 
+<pre class="r"><code>hospitalisation_count &lt;- input_data %&gt;% 
+  dplyr::distinct( patient_num, period, n_hospitalisation ) %&gt;% 
   dplyr::group_by( period, patient_num ) %&gt;%
-  dplyr::summarise(num = n_distinct(n_hospitalisation)) %&gt;%
-  dplyr::summarise( mean_repeated_hospitalizations = mean(num), 
-                    max_repeated_hospitalizations = max(num),
-                    median_repeated_hospitalizations = median(num), 
-                    IQR = IQR( num ))</code></pre>
-<pre><code>## `summarise()` has grouped output by 'period'. You can override using the `.groups` argument.</code></pre>
-<pre><code>## # A tibble: 2 x 5
-##   period   mean_repeated_hosp… max_repeated_hosp… median_repeated_ho…   IQR
-## * &lt;chr&gt;                  &lt;dbl&gt;              &lt;int&gt;               &lt;dbl&gt; &lt;dbl&gt;
-## 1 early_p…                1.27                  3                   1     0
-## 2 late_pa…                1.16                  2                   1     0</code></pre>
+  dplyr::filter(n_hospitalisation == max(n_hospitalisation)) %&gt;%
+  dplyr::group_by( period, add = FALSE) %&gt;% 
+  dplyr::summarise( mean_count_hospitalizations = mean(n_hospitalisation), 
+                    max_count_hospitalizations = max(n_hospitalisation),
+                    median_count_hospitalizations = median(n_hospitalisation), 
+                    sd_hospitalisation_count = sd(n_hospitalisation),
+                    IQR_hospitalisation_count = IQR( n_hospitalisation ))
+
+repeated_hospitalisation &lt;- input_data %&gt;% 
+  dplyr::distinct( patient_num, period, n_hospitalisation ) %&gt;% 
+  dplyr::group_by(patient_num, period) %&gt;% 
+  dplyr::filter(n_hospitalisation == max(n_hospitalisation)) %&gt;% 
+  dplyr::mutate(repeated_hospitalisation = if_else(n_hospitalisation &gt; 1, &quot;repeated&quot;, &quot;non_repeated&quot;)) %&gt;% 
+  dplyr::group_by( period, add = FALSE ) %&gt;% 
+  dplyr::count( repeated_hospitalisation ) %&gt;% 
+  tidyr::pivot_wider(names_from = repeated_hospitalisation, values_from = n)
+repeated_hospitalisation</code></pre>
+<pre><code>## # A tibble: 2 x 3
+## # Groups:   period [2]
+##   period         non_repeated repeated
+##   &lt;chr&gt;                 &lt;int&gt;    &lt;int&gt;
+## 1 early_pandemic           16       10
+## 2 late_pandemic            19       13</code></pre>
+<pre class="r"><code>repeated_hospitalisation_test &lt;- chisq.test(repeated_hospitalisation[, c(&quot;non_repeated&quot;, &quot;repeated&quot;)]) %&gt;% 
+  `[[`(&quot;p.value&quot;)</code></pre>
 </div>
+</div>
+<div id="pulling-together-table-1-statistics" class="section level2">
+<h2>Pulling together Table 1 statistics</h2>
+<pre class="r"><code># count
+# sex
+# # race
+# diagnoses
+# hospitalisations
+
+format_counts &lt;- function(count, percentage) {
+  glue::glue(&quot;{count} ({percentage} %)&quot;, count = count, percentage = percentage)
+}
+
+sex_table1 &lt;- sex_by_period %&gt;% 
+  bind_rows(
+    sex_by_period %&gt;%
+      group_by(period) %&gt;% 
+      dplyr::summarise(sex = &quot;Total&quot;, count = sum(count), percentage = sum(percentage))
+  ) %&gt;% 
+  mutate(result = format_counts(count, percentage)) %&gt;% 
+  select(-c(count, percentage)) %&gt;% 
+  pivot_wider( names_from = period, values_from = result ) %&gt;% 
+  rename(name = sex)
+
+
+
+diagnosis_table1 &lt;- summary_diagnosis %&gt;% 
+    bind_rows(
+    sex_by_period %&gt;%
+      group_by(period) %&gt;% 
+      dplyr::summarise(concept_code = &quot;Total&quot;, count = sum(count))
+  ) %&gt;%
+  pivot_wider( names_from = period, values_from = count) %&gt;% 
+  mutate(diag = paste(concept_code, description, sep = &quot;: &quot;)) %&gt;% 
+  select(diag, early_pandemic, late_pandemic) %&gt;% 
+  rename(name = diag)
+  
+disorder_table1 &lt;- summary_disorder_group_by_period %&gt;% 
+  bind_rows(
+    dplyr::summarise(., disorder_group=&quot;Total&quot;, across(where(is.numeric), sum))
+  ) %&gt;% 
+  mutate(result = format_counts(count, percentage)) %&gt;% 
+  select(-c(count, percentage)) %&gt;% 
+  pivot_wider( names_from = period, values_from = result ) %&gt;% 
+  replace_na( list(early_pandemic = &quot;0 (0 %)&quot;, 
+                   late_pandemic = &quot;0 (0 %)&quot;)) %&gt;% 
+  rename(name = disorder_group)
+
+
+hospit_table1 &lt;- hospit_length %&gt;% 
+  mutate(median = glue::glue(&quot;{median} ({IQR})&quot;, median = length_hospt_median, IQR = IQR), 
+         mean = glue::glue(&quot;{mean} ({sd})&quot;, mean = length_hospt_mean, sd = length_hospt_sd), 
+         n_hospitalisations = as.character(n_hospitalisations)) %&gt;% 
+  select(median, mean, n_hospitalisations, period) %&gt;% 
+  pivot_longer(cols = c(&quot;n_hospitalisations&quot;, &quot;median&quot;, &quot;mean&quot;)) %&gt;% 
+  pivot_wider(names_from = period, values_from = value)
+
+repeated_hospit_table1 &lt;- repeated_hospitalisation %&gt;% 
+  pivot_longer(cols = c(&quot;non_repeated&quot;, &quot;repeated&quot;)) %&gt;% 
+  pivot_wider(names_from = period, values_from = value)
+
+tests &lt;- c(&quot;Sex&quot; = sex_test, 
+           &quot;Diagnoses&quot; = summary_diagnosis_test, 
+           &quot;Disorder groups&quot; = summary_disorder_group_by_period_test, 
+           &quot;Hospitalisations length&quot; = repeated_hospitalisation_test, 
+           &quot;Repeated hospitalisations&quot; = repeated_hospitalisation_test) %&gt;% 
+  data.frame() %&gt;% 
+  round(2)
+names(tests) &lt;- &quot;pvalue&quot;
+tests[&quot;Category&quot;] &lt;- row.names(tests)
+  
+
+table1 &lt;- list(
+  &quot;Sex&quot; = sex_table1, 
+  &quot;Diagnoses&quot; = diagnosis_table1,
+  &quot;Disorder groups&quot; = disorder_table1, 
+  &quot;Hospitalisations length&quot; = hospit_table1,
+  &quot;Repeated hospitalisations&quot; = repeated_hospit_table1) %&gt;% 
+  lapply(function(df) mutate(df, across(.fns = as.character))) %&gt;% 
+  dplyr::bind_rows(.id = &quot;Category&quot;) %&gt;% 
+  dplyr::left_join(tests, by = &quot;Category&quot;)
+
+table1 %&gt;% kable()</code></pre>
+<table>
+<thead>
+<tr>
+<th style="text-align:left;">
+Category
+</th>
+<th style="text-align:left;">
+name
+</th>
+<th style="text-align:left;">
+early_pandemic
+</th>
+<th style="text-align:left;">
+late_pandemic
+</th>
+<th style="text-align:right;">
+pvalue
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+Sex
+</td>
+<td style="text-align:left;">
+female
+</td>
+<td style="text-align:left;">
+12 (46.15 %)
+</td>
+<td style="text-align:left;">
+18 (56.25 %)
+</td>
+<td style="text-align:right;">
+0.62
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sex
+</td>
+<td style="text-align:left;">
+male
+</td>
+<td style="text-align:left;">
+14 (53.85 %)
+</td>
+<td style="text-align:left;">
+14 (43.75 %)
+</td>
+<td style="text-align:right;">
+0.62
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sex
+</td>
+<td style="text-align:left;">
+Total
+</td>
+<td style="text-align:left;">
+26 (100 %)
+</td>
+<td style="text-align:left;">
+32 (100 %)
+</td>
+<td style="text-align:right;">
+0.62
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F41: Panic disorder [episodic paroxysmal anxiety] without agoraphobia
+</td>
+<td style="text-align:left;">
+8
+</td>
+<td style="text-align:left;">
+17
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F32: Major depressive disorder, single episode, mild
+</td>
+<td style="text-align:left;">
+8
+</td>
+<td style="text-align:left;">
+13
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+R45: Nervousness
+</td>
+<td style="text-align:left;">
+5
+</td>
+<td style="text-align:left;">
+11
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+Z91: Wandering in diseases classified elsewhere
+</td>
+<td style="text-align:left;">
+7
+</td>
+<td style="text-align:left;">
+3
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F33: Major depressive disorder, recurrent, mild
+</td>
+<td style="text-align:left;">
+6
+</td>
+<td style="text-align:left;">
+4
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F43: Acute stress reaction
+</td>
+<td style="text-align:left;">
+5
+</td>
+<td style="text-align:left;">
+6
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F88: Other disorders of psychological development
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+6
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F91: Conduct disorder confined to family context
+</td>
+<td style="text-align:left;">
+5
+</td>
+<td style="text-align:left;">
+6
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F34: Cyclothymic disorder
+</td>
+<td style="text-align:left;">
+2
+</td>
+<td style="text-align:left;">
+5
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+R41: Attention and concentration deficit
+</td>
+<td style="text-align:left;">
+5
+</td>
+<td style="text-align:left;">
+5
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+T50: Poisoning by mineralocorticoids and their antagonists, intentional self-harm, initial encounter
+</td>
+<td style="text-align:left;">
+5
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F12: Cannabis abuse, uncomplicated
+</td>
+<td style="text-align:left;">
+4
+</td>
+<td style="text-align:left;">
+4
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+T38: Poisoning by glucocorticoids and synthetic analogues, intentional self-harm, initial encounter
+</td>
+<td style="text-align:left;">
+4
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+T45: Poisoning by antiallergic and antiemetic drugs, intentional self-harm, initial encounter
+</td>
+<td style="text-align:left;">
+4
+</td>
+<td style="text-align:left;">
+2
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+T14: Suicide attempt
+</td>
+<td style="text-align:left;">
+3
+</td>
+<td style="text-align:left;">
+3
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+Z72: Child and adolescent antisocial behavior
+</td>
+<td style="text-align:left;">
+3
+</td>
+<td style="text-align:left;">
+3
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F10: Alcohol abuse, uncomplicated
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+2
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F19: Other psychoactive substance abuse, uncomplicated
+</td>
+<td style="text-align:left;">
+2
+</td>
+<td style="text-align:left;">
+2
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F50: Anorexia nervosa, unspecified
+</td>
+<td style="text-align:left;">
+2
+</td>
+<td style="text-align:left;">
+2
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F98: Other specified behavioral and emotional disorders with onset usually occurring in childhood and adolescence
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+2
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F99: Mental disorder, not otherwise specified
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+2
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+R46: Very low level of personal hygiene
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+2
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+T40: Poisoning by opium, accidental (unintentional), initial encounter
+</td>
+<td style="text-align:left;">
+2
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+T42: Poisoning by other antiepileptic and sedative-hypnotic drugs, undetermined, initial encounter
+</td>
+<td style="text-align:left;">
+2
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+T43: Poisoning by ecstasy, accidental (unintentional), initial encounter
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:left;">
+2
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+X78: Intentional self-harm by sharp glass, initial encounter
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:left;">
+2
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F06: Psychotic disorder with hallucinations due to known physiological condition
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F09: Unspecified mental disorder due to known physiological condition
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F11: Opioid abuse, uncomplicated
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F13: Sedative, hypnotic or anxiolytic abuse, uncomplicated
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F16: Hallucinogen abuse, uncomplicated
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F17: Nicotine dependence, unspecified, uncomplicated
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F31: Bipolar disorder, current episode hypomanic
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F39: Unspecified mood [affective] disorder
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F42: Obsessive-compulsive disorder
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+F44: Dissociative amnesia
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+T36: Poisoning by penicillins, intentional self-harm, initial encounter
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+T41: Poisoning by inhaled anesthetics, intentional self-harm, initial encounter
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+T65: Toxic effect of cyanides, intentional self-harm, initial encounter
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+NA
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+X83: Intentional self-harm by crashing of aircraft, initial encounter
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnoses
+</td>
+<td style="text-align:left;">
+Total: NA
+</td>
+<td style="text-align:left;">
+26
+</td>
+<td style="text-align:left;">
+32
+</td>
+<td style="text-align:right;">
+0.64
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Disorder groups
+</td>
+<td style="text-align:left;">
+Accidental or Undetermined Poisoning
+</td>
+<td style="text-align:left;">
+4 (5.41 %)
+</td>
+<td style="text-align:left;">
+3 (3.12 %)
+</td>
+<td style="text-align:right;">
+0.85
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Disorder groups
+</td>
+<td style="text-align:left;">
+Anxiety Disorders
+</td>
+<td style="text-align:left;">
+8 (10.81 %)
+</td>
+<td style="text-align:left;">
+17 (17.71 %)
+</td>
+<td style="text-align:right;">
+0.85
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Disorder groups
+</td>
+<td style="text-align:left;">
+Bipolar and Related Disorders
+</td>
+<td style="text-align:left;">
+3 (4.05 %)
+</td>
+<td style="text-align:left;">
+5 (5.21 %)
+</td>
+<td style="text-align:right;">
+0.85
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Disorder groups
+</td>
+<td style="text-align:left;">
+Depressive Disorders
+</td>
+<td style="text-align:left;">
+9 (12.16 %)
+</td>
+<td style="text-align:left;">
+13 (13.54 %)
+</td>
+<td style="text-align:right;">
+0.85
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Disorder groups
+</td>
+<td style="text-align:left;">
+Developmental Delay or Unspecified Neurodevelopmental Disorder
+</td>
+<td style="text-align:left;">
+1 (1.35 %)
+</td>
+<td style="text-align:left;">
+6 (6.25 %)
+</td>
+<td style="text-align:right;">
+0.85
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Disorder groups
+</td>
+<td style="text-align:left;">
+Disruptive, Impulse Control and Conduct Disorders
+</td>
+<td style="text-align:left;">
+5 (6.76 %)
+</td>
+<td style="text-align:left;">
+6 (6.25 %)
+</td>
+<td style="text-align:right;">
+0.85
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Disorder groups
+</td>
+<td style="text-align:left;">
+Feeding and Eating Disorders
+</td>
+<td style="text-align:left;">
+2 (2.7 %)
+</td>
+<td style="text-align:left;">
+2 (2.08 %)
+</td>
+<td style="text-align:right;">
+0.85
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Disorder groups
+</td>
+<td style="text-align:left;">
+Mental Health Symptom
+</td>
+<td style="text-align:left;">
+12 (16.22 %)
+</td>
+<td style="text-align:left;">
+13 (13.54 %)
+</td>
+<td style="text-align:right;">
+0.85
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Disorder groups
+</td>
+<td style="text-align:left;">
+Miscellaneous
+</td>
+<td style="text-align:left;">
+6 (8.11 %)
+</td>
+<td style="text-align:left;">
+9 (9.38 %)
+</td>
+<td style="text-align:right;">
+0.85
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Disorder groups
+</td>
+<td style="text-align:left;">
+Obsessive-Compulsive and Related Disorders
+</td>
+<td style="text-align:left;">
+1 (1.35 %)
+</td>
+<td style="text-align:left;">
+0 (0 %)
+</td>
+<td style="text-align:right;">
+0.85
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Disorder groups
+</td>
+<td style="text-align:left;">
+Schizophrenia Spectrum and Other Psychotic Disorders
+</td>
+<td style="text-align:left;">
+1 (1.35 %)
+</td>
+<td style="text-align:left;">
+1 (1.04 %)
+</td>
+<td style="text-align:right;">
+0.85
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Disorder groups
+</td>
+<td style="text-align:left;">
+Substance-Related and Addictive Disorders
+</td>
+<td style="text-align:left;">
+6 (8.11 %)
+</td>
+<td style="text-align:left;">
+4 (4.17 %)
+</td>
+<td style="text-align:right;">
+0.85
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Disorder groups
+</td>
+<td style="text-align:left;">
+Suicide or Self-Injury
+</td>
+<td style="text-align:left;">
+11 (14.86 %)
+</td>
+<td style="text-align:left;">
+10 (10.42 %)
+</td>
+<td style="text-align:right;">
+0.85
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Disorder groups
+</td>
+<td style="text-align:left;">
+Trauma and Stressor-Related Disorders
+</td>
+<td style="text-align:left;">
+5 (6.76 %)
+</td>
+<td style="text-align:left;">
+6 (6.25 %)
+</td>
+<td style="text-align:right;">
+0.85
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Disorder groups
+</td>
+<td style="text-align:left;">
+Dissociative Disorders
+</td>
+<td style="text-align:left;">
+0 (0 %)
+</td>
+<td style="text-align:left;">
+1 (1.04 %)
+</td>
+<td style="text-align:right;">
+0.85
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Disorder groups
+</td>
+<td style="text-align:left;">
+Total
+</td>
+<td style="text-align:left;">
+74 (100 %)
+</td>
+<td style="text-align:left;">
+96 (100 %)
+</td>
+<td style="text-align:right;">
+0.85
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Hospitalisations length
+</td>
+<td style="text-align:left;">
+n_hospitalisations
+</td>
+<td style="text-align:left;">
+33
+</td>
+<td style="text-align:left;">
+37
+</td>
+<td style="text-align:right;">
+1.00
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Hospitalisations length
+</td>
+<td style="text-align:left;">
+median
+</td>
+<td style="text-align:left;">
+7 (9)
+</td>
+<td style="text-align:left;">
+6 (12)
+</td>
+<td style="text-align:right;">
+1.00
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Hospitalisations length
+</td>
+<td style="text-align:left;">
+mean
+</td>
+<td style="text-align:left;">
+12.42 (20.09)
+</td>
+<td style="text-align:left;">
+13.05 (16.04)
+</td>
+<td style="text-align:right;">
+1.00
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Repeated hospitalisations
+</td>
+<td style="text-align:left;">
+non_repeated
+</td>
+<td style="text-align:left;">
+16
+</td>
+<td style="text-align:left;">
+19
+</td>
+<td style="text-align:right;">
+1.00
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Repeated hospitalisations
+</td>
+<td style="text-align:left;">
+repeated
+</td>
+<td style="text-align:left;">
+10
+</td>
+<td style="text-align:left;">
+13
+</td>
+<td style="text-align:right;">
+1.00
+</td>
+</tr>
+</tbody>
+</table>
 </div>
 </div>
 
