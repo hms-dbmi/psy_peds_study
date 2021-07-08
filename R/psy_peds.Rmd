@@ -139,9 +139,6 @@ input_data <- merge( input_data, demo_selection, by = "patient_num")
 ### Determine the obfuscation threshold (FALSE if no obfuscation, the numeric value of the obfuscation threshold if any)
 obfuscation =  FALSE
 #obfuscation = 3
-
-### Determine the analysis period
-period = "week"
 ```
 
 ### Determine start date and cut-off date for early vs late pandemic
@@ -173,13 +170,14 @@ input_data <- merge( input_data, icdCodes, by = "concept_code")
 #select the patient identifier and the week and remove potential duplicates 
 subset <- unique(input_data[ , c("patient_num", "weeks")]) 
 print(paste("Number of unique patients seen per week: ", length(unique(subset$patient_num))))
-summary(subset$week)
+#summary(subset$week)
 
 #estimate the number of patients per week
 input_data[, c("patient_num", "weeks")] %>%
   unique() %>%
   group_by(weeks) %>%
   tally() %>%
+  mutate(n = ifelse( n > obfuscation, n, obfuscation * 0.5)) %>%
   ggplot(aes(x = as.Date(weeks), y = n, fill = "Patients count")) +
   geom_bar(stat="identity")+
   labs(y = "Counts",
@@ -199,6 +197,7 @@ ggsave("../output/overall_weekly_count.png", width = 18, height = 9, units="in")
 input_data[input_data$in_hospital == 1,c("patient_num", "weeks", "disorder_group")] %>%
   unique() %>%
   group_by(weeks, disorder_group) %>% tally() %>%
+  mutate(n = ifelse( n > obfuscation, n, obfuscation * 0.5)) %>%
   ggplot(aes(x = as.Date(weeks), y= n, fill = "", group = disorder_group )) +
   geom_bar(stat = "identity")+
   labs(x = "Week",
@@ -234,13 +233,6 @@ t.test2 <- function(m1, m2, s1, s2, n1, n2) {
 }
 ```
 
-## Count subjects
-```{r}
-count <- table(input_data$period)
-count
-```
-
-
 ## Age
 ```{r}
 age_stats <- input_data %>%
@@ -249,6 +241,7 @@ age_stats <- input_data %>%
   dplyr::summarise( mean = mean( age ), 
                     sd = sd( age ), 
                     count = n()) %>% 
+  dplyr::mutate(count = ifelse( count > obfuscation, count, obfuscation * 0.5)) %>%
   dplyr::ungroup() %>% 
   dplyr::bind_rows(
     dplyr::summarise(input_data, period="Total", mean=mean(age), sd=sd(age), count = n())
@@ -266,16 +259,16 @@ age_test <- t.test2(m1 = age_stats[[1, "mean"]],
 ```{r}
 sex <- input_data %>% 
   dplyr::group_by( sex ) %>%
-  dplyr::summarise( count = n_distinct(patient_num) )
-
-sex$percentage <- round( sex$count / sum(sex$count) * 100, 2)   
-sex
+  dplyr::summarise( count = n_distinct(patient_num) ) %>%
+  dplyr::mutate( count = ifelse( count > obfuscation, count, obfuscation * 0.5), 
+                 total = sum( count ), percentage = round( count/total*100, 2)  )
 
 sex_by_period <- input_data %>% 
   group_by(period, sex ) %>% 
   summarise(count = n_distinct(patient_num)) %>%
   group_by(period, add=TRUE) %>% 
-  mutate(percentage=round(count/sum( count )*100, 2))
+  mutate( count = ifelse( count > obfuscation, count, obfuscation * 0.5),
+          percentage=round(count/sum( count )*100, 2))
   
 
 sex_test <- sex_by_period %>% 
@@ -297,6 +290,7 @@ summary_diagnosis <- input_data %>%
   dplyr::group_by( concept_code, description, period ) %>%
   dplyr::count( patient_num ) %>% 
   dplyr::tally(name = "count") %>%
+  dplyr::mutate(count = ifelse( count > obfuscation, count, obfuscation * 0.5)) %>%
   dplyr::arrange( desc(count) ) %>% 
   dplyr::ungroup()
 
@@ -316,6 +310,7 @@ summary_disorder_group <- input_data %>%
   dplyr::group_by( disorder_group ) %>%
   dplyr::count( patient_num ) %>% 
   dplyr::tally(name = "count") %>%
+  dplyr::mutate(count = ifelse( count > obfuscation, count, obfuscation * 0.5)) %>%
   dplyr::arrange( desc( count ))
 
 summary_disorder_group_by_period <- input_data %>% 
@@ -323,7 +318,8 @@ summary_disorder_group_by_period <- input_data %>%
   dplyr::group_by( period, disorder_group ) %>%
   summarise(count = n_distinct(patient_num)) %>%
   group_by(period, add=TRUE) %>%
-  mutate(percentage=round(count/sum( count )*100, 2)) 
+  mutate(count = ifelse( count > obfuscation, count, obfuscation * 0.5), 
+         percentage=round(count/sum( count )*100, 2)) 
 
 summary_disorder_group_by_period_test <- summary_disorder_group_by_period %>% 
   pivot_wider(id_cols = disorder_group, names_from = period, values_from = c(count, percentage)) %>% 
