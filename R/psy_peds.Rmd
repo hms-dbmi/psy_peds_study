@@ -162,6 +162,31 @@ input_data <- input_data %>%
 input_data <- merge( input_data, icdCodes, by = "concept_code")
 ```
 
+### Determine how many patients had a disorder group previous to the pandemic vs the ones that present the disorder group the first time during the pandemic
+
+```{r}
+summary_by_group_and_period <- input_data %>% 
+  dplyr::group_by( patient_num, disorder_group ) %>%
+  dplyr::mutate( when = ifelse( "early_pandemic" %in% period & "late_pandemic" %in% period, "before and after",
+                                  ifelse( "early_pandemic" %in% period & ! "late_pandemic" %in% period, "before", "after"))) %>%
+  dplyr::select( patient_num, when)
+
+summary_by_group_and_period %>%
+  dplyr::group_by( disorder_group, when ) %>%
+  dplyr::summarise( count= n_distinct( patient_num ) ) %>%
+  ggplot(aes(x = as.factor( disorder_group), y = count, fill = when)) +
+  geom_bar(stat="identity", position = "dodge")+
+  labs(y = "Counts",
+       x = "disorder group",
+       title = "Patients with the same disorder group before and after the pandemic")+
+  theme(legend.position = "bottom") + 
+  scale_fill_grey()
+
+ggsave("../output/disorder_before_after_pandemic.png", width = 18, height = 9, units="in")
+```
+
+
+
 # Temporal trend
 
 ## Patients count per week
