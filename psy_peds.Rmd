@@ -22,17 +22,15 @@ paket(listOfPackages)
 
 
 ```{r}
-options(repr.plot.width = 18, repr.plot.height = 9)
+# options(repr.plot.width = 18, repr.plot.height = 9)
 theme_plots <- theme_bw() +
-  theme(axis.text.y = element_text(size=18), 
-        axis.text.x = element_text(size=18,angle = 45, vjust = 1, hjust=1),
-        axis.title = element_text(size=20), 
-        strip.text = element_text(size=20),
-        strip.text.y = element_text(angle = 0),
-        legend.text = element_text(size=16), 
-        legend.title = element_text(size=16), 
-        title = element_text(size=20), 
-        plot.subtitle = element_text(face = "italic")) 
+  theme(strip.text = element_text(size = 5),
+        axis.text.x = element_text(size = 9), 
+        axis.text.y = element_text(size = 6), 
+        axis.title.x = element_text(size = 10),
+        axis.title.y = element_text(size = 10),
+        title = element_text(size = 12),
+        plot.subtitle = element_text(size = 11, face = "italic")) 
 theme_set(theme_plots)
 ```
 
@@ -209,12 +207,12 @@ summary_by_group_and_period %>%
        legend = "Period")+
   theme(legend.position = "bottom", 
         legend.direction = "vertical",
-        title = element_text(size = 18),
         axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0)) + 
-  coord_flip()
+  coord_flip() +
+  theme_bw()
   # scale_fill_grey()
 
-ggsave("output/disorder_before_after_pandemic.png", width = 18, height = 9, units="in")
+ggsave("output/disorder_before_after_pandemic.png", width = 18, height = 9, units="cm")
 ```
 
 
@@ -242,7 +240,7 @@ ggplot(obs_by_day, aes(x = calendar_date, y = patient_count, color = period))  +
        title = "Hospitalized Patient Counts", 
        legend = "Period") +
   scale_color_brewer(palette = "Set1", name = "Period") 
-ggsave("output/hospitalized_patients.png", width = 18, height = 9, units="in")
+ggsave("output/hospitalized_patients.png", width = 18, height = 9, units="cm")
 ```
 
 ## Patients count per week
@@ -269,7 +267,7 @@ input_data[, c("patient_num", "weeks")] %>%
   scale_fill_brewer(palette = "Dark2") +
   geom_smooth(method = "lm", formula = y ~ splines::ns(x, 2), se = TRUE, aes(colour=period), colour= "black", size = 0.5)
 
-ggsave("output/overall_weekly_count.png", width = 18, height = 9, units="in")
+ggsave("output/overall_weekly_count.png", width = 18, height = 9, units="cm")
 ```
 
 ## Grouping by sex
@@ -331,16 +329,21 @@ input_data[input_data$in_hospital == 1,c("patient_num", "weeks", "disorder_group
   geom_bar(stat = "identity")+
   labs(x = "Week",
        y = "Counts",
-       title = "Patient counts with mental health related ICD codes: grouped per ICD subcategories", 
-       subtitle = "BCH - X-Y age group, inpatients only") + 
+       title = "Patient counts with mental health related ICD codes", 
+       subtitle = "Grouped by ICD subcategories") + 
   scale_fill_manual(values=c('#00BFC4'))+
   geom_smooth(method = "lm", formula = y ~ splines::ns(x, 2), se= TRUE, aes(colour=period), colour= "black", size = 0.5) + 
   ylim(0, NA) + 
   facet_wrap(. ~ disorder_group, scales = "free_y") +
-  theme(strip.text.x = element_text(size = 8),
-        axis.text.x = element_text(size = 12), 
+  theme(strip.text.x = element_text(size = 5),
+        axis.text.x = element_text(size = 9), 
+        axis.text.y = element_text(size = 6), 
+        axis.title.x = element_text(size = 10),
+        axis.title.y = element_text(size = 10),
+        title = element_text(size = 12),
+        plot.subtitle = element_text(size = 11),
         legend.position = "none")
-ggsave("output/categorical_counts_inpatient_teens.png", width = 18, height = 9, units="in")
+ggsave("output/categorical_counts_inpatient_teens.png", width = 18, height = 9, units="cm")
 
 ```
 
