@@ -599,6 +599,12 @@ table1 <- list(
   dplyr::bind_rows(.id = "Category") %>% 
   dplyr::left_join(tests, by = "Category")
 
-table1 %>% kable()
+library(kableExtra)
+table1 %>% 
+  kbl() %>%
+  kable_paper("striped", full_width = F) %>% 
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = c(1, 2, 5), valign = "top")
+
 ```
 
