@@ -61,8 +61,8 @@ We are selecting only those patients that got at least one of the mental health 
 
 # Read the functions and data needed for the analysis. 
 ```{r suppData, message=FALSE}
-source("../R/readInputFiles.R")
-icdCodes <- read.csv("../public-data/psychiatric_ICD-10_codes_adjusted.csv", header = TRUE, colClasses = "character")
+source("R/readInputFiles.R")
+icdCodes <- read.csv("public-data/psychiatric_ICD-10_codes_adjusted.csv", header = TRUE, colClasses = "character")
 
 #get only the code 
 icdCodes$concept_code <- sapply(strsplit( icdCodes$ICD10_Code, "[:]"), '[', 2)
@@ -182,7 +182,7 @@ summary_by_group_and_period %>%
   theme(legend.position = "bottom") + 
   scale_fill_grey()
 
-ggsave("../output/disorder_before_after_pandemic.png", width = 18, height = 9, units="in")
+ggsave("output/disorder_before_after_pandemic.png", width = 18, height = 9, units="in")
 ```
 
 
