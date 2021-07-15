@@ -143,7 +143,6 @@ obfuscation =  FALSE
 # Creating encounter table with observation assigned to encounters
 # 1. Creating encounters identifiers based on clinical_raw information about start and end date of an encounter --> n_hospitalisation
 # 2. Assigning ICD codes to encounters (because they are assigned to the first or last day but usually are meaningful for the entire encounter)
-input_data %>% filter(patient_num == "097A48A2-3AB5-413F-80B8-F746CC55714A")
 encounters_obs <- clinical_raw %>% 
   filter(in_hospital == 1) %>% 
   select(patient_num, days_since_admission, n_hospitalisation) %>% 
