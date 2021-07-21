@@ -152,6 +152,28 @@ We will also transform the date, and break by week, adding 2 additional columns,
 Finally, based on a cut-off date, we will determine if the diagnosis was done in early or late pandemic. 
 For those sites recording the race of the patients, we also add the information to the main table. 
 
+### Check that we have patients with the ICD10 mental codes
+```{r}
+codeLength <- unique( obs_raw %>%
+  dplyr::filter( concept_type == "DIAG-ICD10") %>%
+  dplyr::mutate( concept_code = as.character( concept_code ), 
+                 concept_length = nchar( concept_code ), 
+                 concept_check = ifelse( concept_length == 4 | concept_length > 8, "Check", "OK")) %>%
+  dplyr::select( concept_code, concept_length, concept_check) )
+
+summary(as.factor( codeLength$concept_check ) )
+
+### check regular expression [A-TV-Z][0-9][0-9AB]\.?[0-9A-TV-Z]{0,4}
+
+checkCodes <- icdCodes %>%
+  dplyr::filter( concept_code %in% obs_raw$concept_code ) %>%
+  dplyr::select( concept_code)
+
+print( paste0("There are ", length(checkCodes$concept_code), " ICD10 mental codes out of the total ",length(unique(icdCodes$concept_code)), " in the dataset"))
+```
+
+
+### Generate the table
 ```{r message=FALSE, warning=FALSE}
 cut_off_date <- "2021-04-01"
 
