@@ -47,12 +47,15 @@ The inclusion criteria for this study is:
 Change the values of the next variables to your specific site:
 - "myinputFiles": the specific path where your phase 2.2 data files are located. 
 - "obfuscation": determine the obfuscation threshold (FALSE if no obfuscation, the numeric value of the obfuscation threshold if any)
+- "raceAvailable": set up as TRUE or FALSE depending on if the variable is collected or not at your site
 - "dateFormat": specify the format of the date in your site (e.g, 03-AUG-20, the format would be "%d-%b-%y")
 
 ```{r message=FALSE, warning=FALSE}
 myinputFiles <- "/4ceData/Input/"
 obfuscation =  FALSE
 #obfuscation = 3
+raceAvailable = TRUE
+#raceAvailable = FALSE
 dateFormat <- "%d-%b-%y"
 ```
 
@@ -61,6 +64,9 @@ We will use as input the 2.2 data files. Specifically:
 - localpatientsummary
 - localpatientobservation
 - localpatientclinicalcourse
+
+For those sites recording the race, we will also read an additional file:
+- localPatientRace
 
 ## Read the patient level data input files.
 We will read the 2.2. patient level data files. 
@@ -78,6 +84,11 @@ files <- readInputFiles( path      = myinputFiles,
 demo_raw <- files[[1]]
 obs_raw <- files[[2]]
 clinical_raw <- files[[3]]
+
+### Read the file containing race information for those sites recording this variable
+if( raceAvailable == TRUE ){
+  race_raw <- read.delim(paste0( myinputFiles, "/LocalPatientRace.csv"), sep = ",", skip = 0)
+}
 ```
 
 ## Read the ICD10 codes file
@@ -139,6 +150,7 @@ Now that we have all the information need it, we create our input table:
 
 We will also transform the date, and break by week, adding 2 additional columns, "weeks" and "year". 
 Finally, based on a cut-off date, we will determine if the diagnosis was done in early or late pandemic. 
+For those sites recording the race of the patients, we also add the information to the main table. 
 
 ```{r message=FALSE, warning=FALSE}
 cut_off_date <- "2021-04-01"
@@ -156,6 +168,11 @@ input_data <- obs_raw %>%
   left_join( icdCodes, by = "concept_code") %>%
   dplyr::select( patient_num, sex, age, concept_type, concept_code, calendar_date, in_hospital, n_hospitalisation, len_hospitalisation, 
                  date, weeks, year, period, disorder_group, description )
+
+if( raceAvailable == TRUE ){
+  input_data <- input_data %>%
+    left_join( race_raw, by = "patient_num" )
+}
 ```
 
 
@@ -314,6 +331,7 @@ Here we will estimate the counts to populate table 1, with the counts for early 
 This table one will include:
 - sex
 - age
+- race (when available)
 - hospitalization length
 - diagnosis codes 
 - diagnosis groups
@@ -378,6 +396,33 @@ sex_test <- sex_by_period %>%
   select(count_female, count_male) %>% 
   chisq.test() %>% 
   `[[`("p.value")
+```
+
+## Race
+```{r}
+if( raceAvailable == TRUE ){
+  race <- input_data %>%
+    dplyr::group_by( race_4ce ) %>%
+    dplyr::summarise( count = n_distinct(patient_num) ) %>%
+    dplyr::mutate( count = ifelse( count > obfuscation, count, obfuscation * 0.5), 
+                   total = sum( count ), percentage = round( count/total*100, 2)  )
+  
+  race_by_period <- input_data %>%
+    group_by(period, race_4ce ) %>% 
+    summarise(count = n_distinct(patient_num)) %>%
+    group_by(period, .add=TRUE) %>% 
+    mutate( count = ifelse( count > obfuscation, count, obfuscation * 0.5),
+            percentage=round(count/sum( count )*100, 2))
+    
+  
+summary_race_test <- race_by_period %>% 
+  tidyr::pivot_wider(names_from = period,
+                     values_from = count) %>%
+  select(late_pandemic, early_pandemic) %>% 
+  tidyr::replace_na(list(late_pandemic = 0, early_pandemic = 0)) %>% 
+  chisq.test() %>% 
+  `[[`("p.value")
+}
 ```
 
 ## Diagnosis
@@ -564,13 +609,14 @@ table1 <- list(
   dplyr::bind_rows(.id = "Category") %>% 
   dplyr::left_join(tests, by = "Category")
 
-table1
+knitr::kable( table1 )
 #library(kableExtra)
 #table1 %>% 
 #  kbl() %>%
 #  kable_paper("striped", full_width = F) %>% 
 #  column_spec(1, bold = T) %>%
 #  collapse_rows(columns = c(1, 2, 5), valign = "top")
+
 ```
 
 # Save the output in a text file. 
