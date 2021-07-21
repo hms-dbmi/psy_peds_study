@@ -121,8 +121,8 @@ Depressive Disorders,ICD10:F34.8,Other persistent mood [affective] disorders
 Depressive Disorders,ICD10:F34.81,Disruptive mood dysregulation disorder
 Developmental Delay or Unspecified  Neurodevelopmental Disorder,ICD10:F81.89,Other developmental disorders of scholastic skills
 Developmental Delay or Unspecified  Neurodevelopmental Disorder,ICD10:F81.9,"Developmental disorder of scholastic skills, unspecified"
-Developmental Delay or Unspecified  Neurodevelopmental Disorder,ICD10:F88.,Other disorders of psychological development
-Developmental Delay or Unspecified  Neurodevelopmental Disorder,ICD10:F89.,Unspecified disorder of psychological development
+Developmental Delay or Unspecified  Neurodevelopmental Disorder,ICD10:F88,Other disorders of psychological development
+Developmental Delay or Unspecified  Neurodevelopmental Disorder,ICD10:F89,Unspecified disorder of psychological development
 "Disruptive, Impulse Control and Conduct Disorders",ICD10:F63.0,Pathological gambling
 "Disruptive, Impulse Control and Conduct Disorders",ICD10:F63.1,Pyromania
 "Disruptive, Impulse Control and Conduct Disorders",ICD10:F63.2,Kleptomania
@@ -140,7 +140,7 @@ Dissociative Disorders,ICD10:F44.1,Dissociative fugue
 Dissociative Disorders,ICD10:F44.2,Dissociative stupor
 Dissociative Disorders,ICD10:F44.81,Dissociative identity disorder
 Dissociative Disorders,ICD10:F48.1,Depersonalization-derealization syndrome
-Mental Health Symptom,ICD10:F59.,Unspecified behavioral syndromes associated with physiological disturbances and physical factors
+Mental Health Symptom,ICD10:F59,Unspecified behavioral syndromes associated with physiological disturbances and physical factors
 Mental Health Symptom,ICD10:R44.0,Auditory hallucinations
 Mental Health Symptom,ICD10:R44.1,Visual hallucinations
 Mental Health Symptom,ICD10:R44.2,Other hallucinations
@@ -174,17 +174,17 @@ Mental Health Symptom,ICD10:Z72.810,Child and adolescent antisocial behavior
 Mental Health Symptom,ICD10:Z91.83,Wandering in diseases classified elsewhere
 Miscellaneous,ICD10:F07.0,Personality change due to known physiological condition
 Miscellaneous,ICD10:F07.9,Unspecified personality and behavioral disorder due to known physiological condition
-Miscellaneous,ICD10:F09.,Unspecified mental disorder due to known physiological condition
-Miscellaneous,ICD10:F28.,Other psychotic disorder not due to a substance or known physiological condition
+Miscellaneous,ICD10:F09,Unspecified mental disorder due to known physiological condition
+Miscellaneous,ICD10:F28,Other psychotic disorder not due to a substance or known physiological condition
 Miscellaneous,ICD10:F32.81,Premenstrual dysphoric disorder
 Miscellaneous,ICD10:F34.89,Other specified persistent mood disorders
 Miscellaneous,ICD10:F34.9,"Persistent mood [affective] disorder, unspecified"
-Miscellaneous,ICD10:F39.,Unspecified mood [affective] disorder
+Miscellaneous,ICD10:F39,Unspecified mood [affective] disorder
 Miscellaneous,ICD10:F44.89,Other dissociative and conversion disorders
 Miscellaneous,ICD10:F44.9,"Dissociative and conversion disorder, unspecified"
 Miscellaneous,ICD10:F48.8,Other specified nonpsychotic mental disorders
 Miscellaneous,ICD10:F48.9,"Nonpsychotic mental disorder, unspecified"
-Miscellaneous,ICD10:F54.,Psychological and behavioral factors associated with disorders or diseases classified elsewhere
+Miscellaneous,ICD10:F54,Psychological and behavioral factors associated with disorders or diseases classified elsewhere
 Miscellaneous,ICD10:F55.0,Abuse of antacids
 Miscellaneous,ICD10:F55.1,Abuse of herbal or folk remedies
 Miscellaneous,ICD10:F55.2,Abuse of laxatives
@@ -192,14 +192,14 @@ Miscellaneous,ICD10:F55.3,Abuse of steroids or hormones
 Miscellaneous,ICD10:F55.4,Abuse of vitamins
 Miscellaneous,ICD10:F55.8,Abuse of other non-psychoactive substances
 Miscellaneous,ICD10:F68.8,Other specified disorders of adult personality and behavior
-Miscellaneous,ICD10:F69.,Unspecified disorder of adult personality and behavior
+Miscellaneous,ICD10:F69,Unspecified disorder of adult personality and behavior
 Miscellaneous,ICD10:F93.8,Other childhood emotional disorders
 Miscellaneous,ICD10:F93.9,"Childhood emotional disorder, unspecified"
 Miscellaneous,ICD10:F94.8,Other childhood disorders of social functioning
 Miscellaneous,ICD10:F94.9,"Childhood disorder of social functioning, unspecified"
 Miscellaneous,ICD10:F98.8,Other specified behavioral and emotional disorders with onset usually occurring in childhood and adolescence
 Miscellaneous,ICD10:F98.9,Unspecified behavioral and emotional disorders with onset usually occurring in childhood and adolescence
-Miscellaneous,ICD10:F99.,"Mental disorder, not otherwise specified"
+Miscellaneous,ICD10:F99,"Mental disorder, not otherwise specified"
 Miscellaneous,ICD10:R41.840,Attention and concentration deficit
 Miscellaneous,ICD10:R41.841,Cognitive communication deficit
 Miscellaneous,ICD10:R41.842,Visuospatial deficit
@@ -207,7 +207,7 @@ Miscellaneous,ICD10:R41.843,Psychomotor deficit
 Miscellaneous,ICD10:R41.844,Frontal lobe and executive function deficit
 Miscellaneous,ICD10:R41.89,Other symptoms and signs involving cognitive functions and awareness
 Miscellaneous,ICD10:R41.9,Unspecified symptoms and signs involving cognitive functions and awareness
-Obsessive-Compulsive and Related Disorders,ICD10:F42.,Obsessive-compulsive disorder
+Obsessive-Compulsive and Related Disorders,ICD10:F42,Obsessive-compulsive disorder
 Obsessive-Compulsive and Related Disorders,ICD10:F42.2,Mixed obsessional thoughts and acts
 Obsessive-Compulsive and Related Disorders,ICD10:F42.3,Hoarding disorder
 Obsessive-Compulsive and Related Disorders,ICD10:F42.4,Excoriation (skin-picking) disorder
@@ -215,7 +215,7 @@ Obsessive-Compulsive and Related Disorders,ICD10:F42.8,Other obsessive-compulsiv
 Obsessive-Compulsive and Related Disorders,ICD10:F42.9,"Obsessive-compulsive disorder, unspecified"
 Obsessive-Compulsive and Related Disorders,ICD10:F45.22,Body dysmorphic disorder
 Obsessive-Compulsive and Related Disorders,ICD10:F63.3,Trichotillomania
-Personality Disorders,ICD10:F21.,Schizotypal disorder
+Personality Disorders,ICD10:F21,Schizotypal disorder
 Personality Disorders,ICD10:F60.0,Paranoid personality disorder
 Personality Disorders,ICD10:F60.1,Schizoid personality disorder
 Personality Disorders,ICD10:F60.2,Antisocial personality disorder
@@ -237,14 +237,14 @@ Schizophrenia Spectrum and Other Psychotic Disorders,ICD10:F20.5,Residual schizo
 Schizophrenia Spectrum and Other Psychotic Disorders,ICD10:F20.81,Schizophreniform disorder
 Schizophrenia Spectrum and Other Psychotic Disorders,ICD10:F20.89,Other schizophrenia
 Schizophrenia Spectrum and Other Psychotic Disorders,ICD10:F20.9,"Schizophrenia, unspecified"
-Schizophrenia Spectrum and Other Psychotic Disorders,ICD10:F22.,Delusional disorders
-Schizophrenia Spectrum and Other Psychotic Disorders,ICD10:F23.,Brief psychotic disorder
-Schizophrenia Spectrum and Other Psychotic Disorders,ICD10:F24.,Shared psychotic disorder
+Schizophrenia Spectrum and Other Psychotic Disorders,ICD10:F22,Delusional disorders
+Schizophrenia Spectrum and Other Psychotic Disorders,ICD10:F23,Brief psychotic disorder
+Schizophrenia Spectrum and Other Psychotic Disorders,ICD10:F24,Shared psychotic disorder
 Schizophrenia Spectrum and Other Psychotic Disorders,ICD10:F25.0,"Schizoaffective disorder, bipolar type"
 Schizophrenia Spectrum and Other Psychotic Disorders,ICD10:F25.1,"Schizoaffective disorder, depressive type"
 Schizophrenia Spectrum and Other Psychotic Disorders,ICD10:F25.8,Other schizoaffective disorders
 Schizophrenia Spectrum and Other Psychotic Disorders,ICD10:F25.9,"Schizoaffective disorder, unspecified"
-Schizophrenia Spectrum and Other Psychotic Disorders,ICD10:F29.,Unspecified psychosis not due to a substance or known physiological condition
+Schizophrenia Spectrum and Other Psychotic Disorders,ICD10:F29,Unspecified psychosis not due to a substance or known physiological condition
 Sleep-Wake Disorders,ICD10:F51.01,Primary insomnia
 Sleep-Wake Disorders,ICD10:F51.02,Adjustment insomnia
 Sleep-Wake Disorders,ICD10:F51.03,Paradoxical insomnia
