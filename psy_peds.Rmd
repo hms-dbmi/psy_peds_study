@@ -529,13 +529,6 @@ repeated_hospitalisation_test <- chisq.test(repeated_hospitalisation[, c("non_re
 
 ## Pulling together Table 1 statistics
 ```{r}
-
-# count
-# sex
-# # race
-# diagnoses
-# hospitalisations
-
 format_counts <- function(count, percentage) {
   glue::glue("{count} ({percentage} %)", count = count, percentage = percentage)
 }
@@ -551,7 +544,18 @@ sex_table1 <- sex_by_period %>%
   pivot_wider( names_from = period, values_from = result ) %>% 
   rename(name = sex)
 
-
+if( raceAvailable == TRUE ){
+  race_table1 <- race_by_period %>% 
+  bind_rows(
+    race_by_period %>%
+      group_by(period) %>% 
+      dplyr::summarise(race_4ce = "Total", count = sum(count), percentage = sum(percentage))
+  ) %>% 
+  mutate(result = format_counts(count, percentage)) %>% 
+  select(-c(count, percentage)) %>% 
+  pivot_wider( names_from = period, values_from = result ) %>% 
+  rename(name = race_4ce)
+}
 
 diagnosis_table1 <- summary_diagnosis %>% 
     bind_rows(
@@ -588,7 +592,31 @@ repeated_hospit_table1 <- repeated_hospitalisation %>%
   pivot_longer(cols = c("non_repeated", "repeated")) %>% 
   pivot_wider(names_from = period, values_from = value)
 
-tests <- c("Sex" = sex_test, 
+if( raceAvailable == TRUE ){
+  tests <- c("Sex" = sex_test, 
+            "Race" = summary_race_test,
+           "Diagnoses" = summary_diagnosis_test, 
+           "Disorder groups" = summary_disorder_group_by_period_test, 
+           "Hospitalisations length" = repeated_hospitalisation_test, 
+           "Repeated hospitalisations" = repeated_hospitalisation_test) %>% 
+    data.frame() %>% 
+    round(2)
+  names(tests) <- "pvalue"
+  tests["Category"] <- row.names(tests)
+  
+  table1 <- list(
+    "Sex" = sex_table1, 
+    "Race" = race_table1,
+    "Diagnoses" = diagnosis_table1,
+    "Disorder groups" = disorder_table1, 
+    "Hospitalisations length" = hospit_table1,
+    "Repeated hospitalisations" = repeated_hospit_table1) %>% 
+    lapply(function(df) mutate(df, across(.fns = as.character))) %>% 
+    dplyr::bind_rows(.id = "Category") %>% 
+    dplyr::left_join(tests, by = "Category")
+  
+}else{
+  tests <- c("Sex" = sex_test, 
            "Diagnoses" = summary_diagnosis_test, 
            "Disorder groups" = summary_disorder_group_by_period_test, 
            "Hospitalisations length" = repeated_hospitalisation_test, 
@@ -597,7 +625,6 @@ tests <- c("Sex" = sex_test,
   round(2)
 names(tests) <- "pvalue"
 tests["Category"] <- row.names(tests)
-  
 
 table1 <- list(
   "Sex" = sex_table1, 
@@ -608,6 +635,7 @@ table1 <- list(
   lapply(function(df) mutate(df, across(.fns = as.character))) %>% 
   dplyr::bind_rows(.id = "Category") %>% 
   dplyr::left_join(tests, by = "Category")
+}
 
 knitr::kable( table1 )
 #library(kableExtra)
