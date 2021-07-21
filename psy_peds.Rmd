@@ -565,7 +565,7 @@ table1 <- list(
   dplyr::left_join(tests, by = "Category")
 
 table1
-library(kableExtra)
+#library(kableExtra)
 #table1 %>% 
 #  kbl() %>%
 #  kable_paper("striped", full_width = F) %>% 
@@ -606,7 +606,7 @@ obs_by_day = encounters_obs %>%
             on = c("patient_num", "n_hospitalisation")) %>% 
   group_by(calendar_date) %>% 
   summarise(patient_count = n_distinct(patient_num)) %>% 
-  mutate(calendar_date = as.Date(calendar_date), 
+  mutate(calendar_date = as.Date(calendar_date, format=dateFormat), 
          period = if_else(calendar_date >= cut_off_date, "During", "Before")
   )
 
