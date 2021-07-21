@@ -130,7 +130,6 @@ obfuscation =  FALSE
 #obfuscation = 3
 ```
 
-
 ### Determine start date and cut-off date for early vs late pandemic
 ```{r}
 # filter by date, to meet the inclusion criteria
