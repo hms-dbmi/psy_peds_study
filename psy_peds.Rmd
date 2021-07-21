@@ -1,5 +1,5 @@
 ---
-title: "psy_peds"
+title: "Hospitalizations for psychiatric conditions among adolescents during the COVID-19 pandemic"
 output:
   html_document:
     code_folding: show
@@ -35,34 +35,55 @@ theme_set(theme_plots)
 ```
 
 
-# Pediatrics trends
-
-## Inclusion criteria
+# Inclusion criteria
 The inclusion criteria for this study is:
 - inpatients
 - Sars-Cov-2 PCR positive or negative (no filter by covid-19 condition, just PCR test done at BCH)
 - filtered by age (11-17)
-- 21st April 2020 - Up to date
+- 1st January 2019 - Up to date
 - The ICD-10 code from the list as diagnosis during hospitalization
 
-## Data input
-As input we will generate a table that contains: 
-- patient identifier
-- concept code (ICD-10 code)
-- start date (day-month-year, 30-SEP-20)
-- age (in years)
-- hospitalization status
+# Variables that need to be checked/modified by each site 
+Change the values of the next variables to your specific site:
+- "myinputFiles": the specific path where your phase 2.2 data files are located. 
+- "obfuscation": determine the obfuscation threshold (FALSE if no obfuscation, the numeric value of the obfuscation threshold if any)
+- "dateFormat": specify the format of the date in your site (e.g, 03-AUG-20, the format would be "%d-%b-%y")
 
-We will generate this table using as input 2.2 data, specifically the files:
+```{r message=FALSE, warning=FALSE}
+myinputFiles <- "/4ceData/Input/"
+obfuscation =  FALSE
+#obfuscation = 3
+dateFormat <- "%d-%b-%y"
+```
+
+# Data input
+We will use as input the 2.2 data files. Specifically: 
 - localpatientsummary
 - localpatientobservation
 - localpatientclinicalcourse
 
-We select only those patients that got at least one of the mental health ICD codes
+## Read the patient level data input files.
+We will read the 2.2. patient level data files. 
 
-# Read the functions and data needed for the analysis. 
-```{r suppData, message=FALSE}
+```{r message=FALSE, warning=FALSE}
+### Read the CSV input files
 source("R/readInputFiles.R")
+
+files <- readInputFiles( path      = myinputFiles, 
+                         separator = ",",
+                         skip      = 0, 
+                         verbose   = FALSE )
+  
+### Extract the patient summary and observation information. 
+demo_raw <- files[[1]]
+obs_raw <- files[[2]]
+clinical_raw <- files[[3]]
+```
+
+## Read the ICD10 codes file
+We also need to read the file containing the ICD10 psychiatric related codes, located in the public-data folder of the GitHub repository. 
+
+```{r suppData, message=FALSE}
 icdCodes <- read.csv("public-data/psychiatric_ICD-10_codes_adjusted.csv", header = TRUE, colClasses = "character")
 
 #get only the code 
@@ -77,24 +98,23 @@ icdCodes <- icdCodes %>%
 ```
 
 
-## Read the patient level data input files.
+# Data transformation
+From the whole dataset we will select only those patients that have been diagnosed with at least one of the mental health ICD10 codes. 
+For these patients we will generate a table that will allow us to perform all the analysis required for this study. 
+This transformed table will contain 9 columns:
+- patient_num: patient internal identifier
+- sex (male, female)
+- age (in years)
+- concept_type (DIAG-ICD10)
+- concept_code (ICD-10 full code, e.g, R44.1)
+- calendar_date (day-month-year, 30-SEP-20)
+- hospitalization status (1, 0)
+- n_hospitalization (the hospitalization number)
+- len_hospitalization (length of each hospitalization)
 
-```{r message=FALSE, warning=FALSE}
-### Read the CSV input files
-#change to the path where your phase 2.2 data files are located
-myinputFiles <- "/4ceData/Input/"
-files <- readInputFiles( path      = myinputFiles, 
-                         separator = ",",
-                         skip      = 0, 
-                         verbose   = FALSE )
-  
-### Extract the patient summary and observation information. 
-demo_raw <- files[[1]]
-obs_raw <- files[[2]]
-clinical_raw <- files[[3]]
-```
+The last two columns are not available in the input data files. We will generate those counts using the information available in the clinical raw file.  
 
-## Adding columns with hospitalization length to the clinical raw file
+## Adding columns with hospitalization number and hospitalization length to the clinical raw file
 ```{r}
 count_sequences_hospitalisation <- function(df, ...) {
   count_sequences <- rle(df$in_hospital)
@@ -110,42 +130,44 @@ clinical_raw <- clinical_raw %>% group_by(patient_num) %>%
   group_modify(count_sequences_hospitalisation)
 ```
 
-## Data management 
+## Creating the table with all the data we need after filtering by inclusion criteria
+Now that we have all the information need it, we create our input table:
+- selecting only patients with mental diagnosis during hospitalization
+- add the demographic and hospitalization related data 
+- select only patients from 11 to 17 years old. 
+- add the concept description and the disorder group
 
-### Creating a table with all the data we need after filtering by inclusion criteria
+We will also transform the date, and break by week, adding 2 additional columns, "weeks" and "year". 
+Finally, based on a cut-off date, we will determine if the diagnosis was done in early or late pandemic. 
+
 ```{r message=FALSE, warning=FALSE}
-### Select only patients with mental diagnosis during hospitalization 
-### Add the demographic data and select only pediatric subset (0-17)
+cut_off_date <- "2021-04-01"
+
 input_data <- obs_raw %>% 
   full_join( clinical_raw,  by = c("patient_num", "days_since_admission")) %>%
   full_join( demo_raw, by = "patient_num") %>%
+  dplyr::mutate( date = as.Date( calendar_date, format = dateFormat ), weeks = cut( date, breaks= "week"), year = format( date, "%Y"), 
+                 period = ifelse( date < cut_off_date, "early_pandemic","late_pandemic")) %>%
   dplyr::filter( concept_type == "DIAG-ICD10", 
                  in_hospital == 1, 
                  concept_code %in% icdCodes$concept_code, 
-                 age < 18 & age > 10 ) %>%
-  dplyr::select( patient_num, sex, age, concept_type, concept_code, calendar_date, in_hospital, n_hospitalisation, len_hospitalisation)
-
-### Determine the obfuscation threshold (FALSE if no obfuscation, the numeric value of the obfuscation threshold if any)
-obfuscation =  FALSE
-#obfuscation = 3
+                 age < 18 & age > 10,
+                 date >= "2019-01-01") %>%
+  left_join( icdCodes, by = "concept_code") %>%
+  dplyr::select( patient_num, sex, age, concept_type, concept_code, calendar_date, in_hospital, n_hospitalisation, len_hospitalisation, 
+                 date, weeks, year, period, disorder_group, description )
 ```
 
-### Determine start date and cut-off date for early vs late pandemic
-```{r}
-# filter by date, to meet the inclusion criteria
-cut_off_date <- "2021-04-01"
-dateFormat <- "%d-%b-%y"
-# check the format of the dates is the the expected one
 
-# breaks by week and add the concept description and group
-input_data <- input_data %>% 
-  dplyr::mutate( date = as.Date( calendar_date, format = dateFormat ), weeks = cut( date, breaks= "week"), year = format( date, "%Y"), 
-                 period = ifelse( date < cut_off_date, "early_pandemic","late_pandemic")) %>%
-  dplyr::filter( date >= "2019-01-01") %>%
-  left_join( icdCodes, by = "concept_code")
-```
+# Data analysis 
 
-### Determine how many patients had a disorder group previous to the pandemic vs the ones that present the disorder group the first time during the pandemic
+## Patients with a disorder group previous to the pandemic vs patients that present the disorder group the first time during the pandemic
+We estimate the number of patients that a disorder group:
+- only before the pandemic
+- only after the pandemic
+- both, before and after the pandemic 
+
+The output is a barplot showing in the x-axis the number of patients, and in the y-axis the distinct disorder groups. Each disorder group has 3 bars associated based on the three previous options. 
 
 ```{r}
 summary_by_group_and_period <- input_data %>% 
@@ -186,10 +208,9 @@ summary_by_group_and_period %>%
 ggsave("output/disorder_before_after_pandemic.png", width = 18, height = 9, units="cm")
 ```
 
-# Temporal trend
-
 ## Patients count per week
-
+Here we estimate the number of patients hospitalized per week. 
+The output is a barplot showing in the x-axis the week, and in the y-axis the patient counts. Additionally a temporal trend line is added on top of the bars.
 ```{r}
 #estimate the number of patients per week
 input_data[, c("patient_num", "weeks")] %>%
@@ -210,7 +231,11 @@ input_data[, c("patient_num", "weeks")] %>%
 ggsave("output/overall_weekly_count.png", width = 18, height = 9, units="cm")
 ```
 
-## Grouping by sex
+We replicate the previous graphic aggregating by:
+- Sex 
+- Age group
+
+### Patients count per week aggregated by sex
 ```{r}
 input_data[, c("patient_num", "sex","weeks")] %>%
   unique() %>%
@@ -228,8 +253,11 @@ input_data[, c("patient_num", "sex","weeks")] %>%
   geom_smooth(method = "lm", formula = y ~ splines::ns(x, 2), se = TRUE, aes(colour=sex), colour= "black", size = 0.5)
 ```
 
-## Grouping by age group
-```{r}
+### Patients count per week aggregated by age group 
+This graphic will only make sense if we include a wide range of age. 
+Right now this comment is not run since we are only including adolescents. 
+
+```{r, eval=FALSE}
 #estimate the number of patients per week by age group
 input_data[, c("patient_num", "age","weeks")] %>%
   unique() %>%
@@ -249,7 +277,10 @@ input_data[, c("patient_num", "age","weeks")] %>%
 
 ```
 
-## Grouping by ICD subgroup category 
+## Patients counts per week rouping by ICD subgroup category 
+Here we estimate the number of patients hospitalized per week but we break it based on the distinct disorder groups. 
+The output is a barplot showing in the x-axis the week, and in the y-axis the patient counts. Additionally a temporal trend line is added on top of the bars.
+Each barplot represent a disorder group.
 
 ```{r}
 input_data[input_data$in_hospital == 1,c("patient_num", "weeks", "disorder_group")] %>%
@@ -279,6 +310,13 @@ ggsave("output/categorical_counts_inpatient_teens.png", width = 18, height = 9, 
 ```
 
 # Summary table 1
+Here we will estimate the counts to populate table 1, with the counts for early and late pandemic, and a statistical test comparing both. 
+This table one will include:
+- sex
+- age
+- hospitalization length
+- diagnosis codes 
+- diagnosis groups
 
 ```{r}
 t.test2 <- function(m1, m2, s1, s2, n1, n2) {
@@ -534,6 +572,17 @@ library(kableExtra)
 #  column_spec(1, bold = T) %>%
 #  collapse_rows(columns = c(1, 2, 5), valign = "top")
 ```
+
+# Save the output in a text file. 
+```{r, eval=FALSE}
+```
+
+
+# R session information
+```{r}
+sessionInfo()
+```
+
 
 ##### To review 
 ## Temporal trend of hospitalized patients per day 
