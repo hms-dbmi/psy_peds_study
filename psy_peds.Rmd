@@ -154,22 +154,23 @@ For those sites recording the race of the patients, we also add the information 
 
 ### Check that we have patients with the ICD10 mental codes
 ```{r}
-codeLength <- unique( obs_raw %>%
-  dplyr::filter( concept_type == "DIAG-ICD10") %>%
+### check that the ICD codes follow the regular expression [A-TUV-Z][0-9][0-9AB]\.?[0-9A-TV-Z]{0,4}
+codesToReview <- obs_raw %>% dplyr::filter(concept_type == "DIAG-ICD10",
+                                           ! grepl( "[A-TUV-Z][0-9][0-9AB]\\.?[0-9A-TV-Z]{0,4}", concept_code))
+print(codesToReview)
+
+### Estimate how many of the mental codes are in the dataset
+mentalHealthCodes <- unique( obs_raw %>%
+  dplyr::filter( concept_type == "DIAG-ICD10", 
+                 concept_code %in% icdCodes$concept_code ) %>%
   dplyr::mutate( concept_code = as.character( concept_code ), 
                  concept_length = nchar( concept_code ), 
                  concept_check = ifelse( concept_length == 4 | concept_length > 8, "Check", "OK")) %>%
   dplyr::select( concept_code, concept_length, concept_check) )
 
-summary(as.factor( codeLength$concept_check ) )
+summary(as.factor( mentalHealthCodes$concept_check ) )
 
-### check regular expression [A-TV-Z][0-9][0-9AB]\.?[0-9A-TV-Z]{0,4}
-
-checkCodes <- icdCodes %>%
-  dplyr::filter( concept_code %in% obs_raw$concept_code ) %>%
-  dplyr::select( concept_code)
-
-print( paste0("There are ", length(checkCodes$concept_code), " ICD10 mental codes out of the total ",length(unique(icdCodes$concept_code)), " in the dataset"))
+print( paste0("There are ", length(mentalHealthCodes$concept_code), " ICD10 mental codes out of the total ",length(unique(icdCodes$concept_code)), " in the dataset"))
 ```
 
 
@@ -671,6 +672,38 @@ knitr::kable( table1 )
 
 # Save the output in a text file. 
 ```{r, eval=FALSE}
+site <- unique(as.character(demo_raw$siteid))
+
+patient_count_barplot_period <- summary_by_group_and_period %>%
+  dplyr::group_by( disorder_group, when ) %>%
+  dplyr::summarise( count= n_distinct( patient_num ), siteid = site )
+
+patient_count_per_week <- input_data[, c("patient_num", "weeks")] %>%
+  unique() %>%
+  group_by(weeks) %>%
+  tally() %>%
+  mutate(n = ifelse( n > obfuscation, n, obfuscation * 0.5), siteid = site )
+
+
+patient_count_per_week_sex <- input_data[, c("patient_num", "sex","weeks")] %>%
+  unique() %>%
+  group_by(weeks, sex) %>%
+  tally() %>%
+  mutate(n = ifelse( n > obfuscation, n, obfuscation * 0.5), siteid = site)
+
+patient_count_per_week_disorder_group <- input_data[input_data$in_hospital == 1,c("patient_num", "weeks", "disorder_group")] %>%
+  unique() %>%
+  group_by(weeks, disorder_group) %>% tally() %>%
+  mutate(n = ifelse( n > obfuscation, n, obfuscation * 0.5), siteid = site)
+
+length_hospitalisation_values <- input_data %>% 
+  dplyr::distinct( patient_num, n_hospitalisation, len_hospitalisation ) %>%
+  dplyr::mutate( siteid = site ) %>%
+  dplyr::select( len_hospitalisation, siteid )
+  
+
+save( patient_count_barplot_period, patient_count_per_week, patient_count_per_week_sex, patient_count_per_week_disorder_group, table1, length_hospitalisation_values, file = paste0("output/peds_psy_aggResults_", unique(as.character(demo_raw$siteid)), ".rda"))
+
 ```
 
 
