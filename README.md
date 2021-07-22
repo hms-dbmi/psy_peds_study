@@ -18,6 +18,7 @@ Then open the file psy_peds.Rmd and:
     - obfuscation = FALSE if no obfuscation
     - the numeric value of the obfuscation threshold if any; e.g. obfuscation = 3
     Make sure you comment the existing obfuscation line, set up as FALSE
+- specify if the race information is collected or not at your site (raceAvailable: set up as TRUE or FALSE)
 - change the dateFormat to the one followed in your site (e.g., if your date looks like 03-AUG-20 follows the format "%d-%b-%y"). Further details about how to specificy the format below:
 
 %d day as a number (0-31)	01-31
