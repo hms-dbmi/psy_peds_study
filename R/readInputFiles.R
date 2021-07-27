@@ -24,7 +24,7 @@ readInputFiles <- function( path, separator = ",", skip = 0, verbose = FALSE ){
   
   #check that the input files needed are in the path 
   if( verbose == TRUE){
-    print( 'Checking if the files are located in the directory provided')
+    print('Checking if the files are located in the directory provided')
   }
   
   filesInDirectory <- list.files( path = "./")
