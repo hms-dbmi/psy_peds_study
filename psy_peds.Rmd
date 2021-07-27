@@ -439,9 +439,9 @@ patient_count_per_week_disorder_group %>%
              linetype = "dashed") +
   geom_smooth(method = "lm", formula = y ~ splines::ns(x, 2), se= TRUE, aes(colour=period), colour= "black", size = 0.5) + 
   labs(x = "Week",
-       y = "Counts",
-       title = "Patient counts with mental health related ICD codes", 
-       subtitle = "Grouped by mental health subcategories subcategories") + 
+       y = "Patient Counts",
+       title = "Weekly patient counts with mental health related ICD codes", 
+       subtitle = "Grouped by mental health ICD subcategories") + 
   ylim(0, NA) + 
   facet_wrap(. ~ disorder_group, scales = "free_y") +
   theme(strip.text.x = element_text(size = 5),
@@ -659,7 +659,6 @@ repeated_hospitalisation <- input_data %>%
   dplyr::count( repeated_hospitalisation ) %>% 
   tidyr::pivot_wider(names_from = repeated_hospitalisation, values_from = n) %>% 
   replace_na(list("non_repeated" = 0, "repeated" = 0))
-repeated_hospitalisation
 repeated_hospitalisation_test <- chisq.test(repeated_hospitalisation[, c("non_repeated", "repeated")]) %>% 
   `[[`("p.value")
 ```
