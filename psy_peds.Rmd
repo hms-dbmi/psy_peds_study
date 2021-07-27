@@ -444,7 +444,7 @@ patient_count_per_week_disorder_group %>%
        subtitle = "Grouped by mental health ICD subcategories") + 
   ylim(0, NA) + 
   facet_wrap(. ~ disorder_group, scales = "free_y") +
-  theme(strip.text.x = element_text(size = 5),
+  theme(strip.text.x = element_text(size = 4),
         axis.text.x = element_text(size = 5, angle = 90), 
         axis.text.y = element_text(size = 6), 
         axis.title.x = element_text(size = 10),
